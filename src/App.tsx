@@ -20,6 +20,7 @@ import { LegalDisclaimerView } from './components/public/LegalDisclaimerView.js'
 import { ClientDashboard } from './components/client/ClientDashboard.js';
 import { SubmitCaseModal } from './components/client/SubmitCaseModal.js';
 import { ClientPaymentsView } from './components/client/ClientPaymentsView.js';
+import { PaymentDetailPage } from './components/client/PaymentDetailPage.js';
 import { ClientAppointmentsView } from './components/client/ClientAppointmentsView.js';
 import { MyCasesView } from './components/client/MyCasesView.js';
 import { NewCaseForm } from './components/client/NewCaseForm.js';
@@ -28,6 +29,13 @@ import { ClientNotificationsView } from './components/client/ClientNotifications
 
 // Lawyer views
 import { LawyerDashboard } from './components/lawyer/LawyerDashboard.js';
+import { LawyerCaseRequestsView } from './components/lawyer/LawyerCaseRequestsView.js';
+import { LawyerCasesView } from './components/lawyer/LawyerCasesView.js';
+import { LawyerClientsView } from './components/lawyer/LawyerClientsView.js';
+import { LawyerVerificationView } from './components/lawyer/LawyerVerificationView.js';
+import { AdvocateLegalResearchView } from './components/lawyer/AdvocateLegalResearchView.js';
+import { AdvocateDraftingWorkspace } from './components/lawyer/AdvocateDraftingWorkspace.js';
+import { AdvocateDraftsListView } from './components/lawyer/AdvocateDraftsListView.js';
 import { AIDraftingTool } from './components/lawyer/AIDraftingTool.js';
 import { JudgmentSearchTool } from './components/lawyer/JudgmentSearchTool.js';
 
@@ -60,6 +68,8 @@ export function App() {
   const [cases, setCases] = useState<LegalCase[]>([]);
   const [lawyers, setLawyers] = useState<LawyerProfile[]>([]);
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
+  const [preloadedAuthorityForDraft, setPreloadedAuthorityForDraft] = useState<any | null>(null);
 
   // Modals
   const [submitCaseOpen, setSubmitCaseOpen] = useState(false);
@@ -90,8 +100,13 @@ export function App() {
           setActiveCaseId(cId);
           setViewParams({ tab: subTab, caseId: cId });
           setCurrentView('case-room');
-        } else if (sub === 'payments') {
+        } else if (sub === 'payments' || sub === 'payments/') {
           setCurrentView('client-payments');
+        } else if (sub.startsWith('payments/')) {
+          const payId = sub.replace('payments/', '');
+          setSelectedPaymentId(payId);
+          setViewParams({ paymentId: payId });
+          setCurrentView('client-payment-detail');
         } else if (sub === 'appointments' || sub === 'consultations') {
           setCurrentView('client-appointments');
         } else if (sub === 'profile') {
@@ -103,8 +118,13 @@ export function App() {
         }
       } else if (hash.startsWith('lawyer/')) {
         const sub = hash.replace('lawyer/', '');
-        if (sub === 'ai-drafting') setCurrentView('ai-drafting');
-        else if (sub === 'judgment-search') setCurrentView('judgment-search');
+        if (sub === 'ai-drafting' || sub === 'drafting') setCurrentView('lawyer-drafting');
+        else if (sub === 'legal-research' || sub === 'research' || sub === 'judgment-search' || sub === 'judgments') setCurrentView('lawyer-legal-research');
+        else if (sub === 'drafts' || sub === 'saved-drafts') setCurrentView('lawyer-drafts');
+        else if (sub === 'requests') setCurrentView('lawyer-requests');
+        else if (sub === 'cases') setCurrentView('lawyer-cases');
+        else if (sub === 'clients') setCurrentView('lawyer-clients');
+        else if (sub === 'verification' || sub === 'profile') setCurrentView('lawyer-verification');
         else setCurrentView('lawyer-dashboard');
       } else if (hash.startsWith('admin/')) {
         setCurrentView('admin-dashboard');
@@ -248,6 +268,10 @@ export function App() {
     else if (view === 'client-new-case') newHash = '#/client/cases/new';
     else if (view === 'client-appointments' || view === 'client-consultations') newHash = '#/client/appointments';
     else if (view === 'client-payments') newHash = '#/client/payments';
+    else if (view === 'client-payment-detail') {
+      const pId = params?.paymentId || selectedPaymentId;
+      newHash = pId ? `#/client/payments/${pId}` : '#/client/payments';
+    }
     else if (view === 'client-profile') newHash = '#/client/profile';
     else if (view === 'client-notifications') newHash = '#/client/notifications';
     else if (view === 'case-room') {
@@ -260,8 +284,13 @@ export function App() {
       }
     }
     else if (view === 'lawyer-dashboard') newHash = '#/lawyer/dashboard';
-    else if (view === 'ai-drafting') newHash = '#/lawyer/ai-drafting';
-    else if (view === 'judgment-search') newHash = '#/lawyer/judgment-search';
+    else if (view === 'lawyer-requests') newHash = '#/lawyer/requests';
+    else if (view === 'lawyer-cases') newHash = '#/lawyer/cases';
+    else if (view === 'lawyer-clients') newHash = '#/lawyer/clients';
+    else if (view === 'lawyer-verification' || view === 'lawyer-profile-manage') newHash = '#/lawyer/verification';
+    else if (view === 'ai-drafting' || view === 'lawyer-drafting') newHash = '#/lawyer/drafting';
+    else if (view === 'lawyer-legal-research' || view === 'judgment-search' || view === 'lawyer-judgments') newHash = '#/lawyer/legal-research';
+    else if (view === 'lawyer-drafts') newHash = '#/lawyer/drafts';
     else if (view === 'admin-dashboard') newHash = '#/admin/dashboard';
     else if (view === 'unauthorized') newHash = '#/unauthorized';
     else if (view === 'forbidden') newHash = '#/forbidden';
@@ -302,9 +331,9 @@ export function App() {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-300 font-sans">
         <div className="w-12 h-12 rounded-xl bg-amber-600 flex items-center justify-center text-slate-950 mb-4 animate-pulse">
-          <span className="font-serif font-bold text-xl">LW</span>
+          <span className="font-serif font-bold text-xl">CS</span>
         </div>
-        <h2 className="font-serif font-bold text-lg text-white">LAWShin Legal-Tech Platform</h2>
+        <h2 className="font-serif font-bold text-lg text-white">Counselia Platform</h2>
         <p className="text-xs text-slate-500 mt-1">Connecting Citizens with Verified Indian Advocates...</p>
       </div>
     );
@@ -460,9 +489,11 @@ export function App() {
             onSwitchAccountClick={() => setAuthModalOpen(true)}
           >
             <MyCasesView
+              cases={cases}
+              lawyers={lawyers}
               onOpenCaseRoom={handleOpenCaseRoom}
-              onNavigateToNewCase={() => handleNavigate('client-new-case')}
-              onNavigate={handleNavigate}
+              onSubmitCaseClick={() => handleNavigate('client-new-case')}
+              onRefreshCases={refreshCases}
             />
           </ProtectedRoute>
         )}
@@ -511,7 +542,32 @@ export function App() {
             onNavigateHome={() => handleNavigate('home')}
             onSwitchAccountClick={() => setAuthModalOpen(true)}
           >
-            <ClientPaymentsView />
+            <ClientPaymentsView
+              onNavigatePayment={(paymentId) => {
+                setSelectedPaymentId(paymentId);
+                handleNavigate('client-payment-detail', { paymentId });
+              }}
+            />
+          </ProtectedRoute>
+        )}
+
+        {currentView === 'client-payment-detail' && (
+          <ProtectedRoute
+            currentUser={session?.user || null}
+            allowedRoles={['client']}
+            attemptedPath={`/client/payments/${selectedPaymentId || ''}`}
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onNavigateHome={() => handleNavigate('home')}
+            onSwitchAccountClick={() => setAuthModalOpen(true)}
+          >
+            <PaymentDetailPage
+              paymentId={selectedPaymentId || viewParams?.paymentId || ''}
+              onBack={() => handleNavigate('client-payments')}
+              onNavigateCase={(caseId) => {
+                setActiveCaseId(caseId);
+                handleNavigate('case-room', { caseId, tab: 'overview' });
+              }}
+            />
           </ProtectedRoute>
         )}
 
@@ -570,34 +626,158 @@ export function App() {
           </ProtectedRoute>
         )}
 
-        {currentView === 'ai-drafting' && (
+        {currentView === 'lawyer-requests' && (
           <ProtectedRoute
             currentUser={session?.user || null}
             allowedRoles={['lawyer']}
-            attemptedPath="/lawyer/ai-drafting"
+            attemptedPath="/lawyer/requests"
             onOpenAuth={() => setAuthModalOpen(true)}
             onNavigateHome={() => handleNavigate('home')}
             onSwitchAccountClick={() => setAuthModalOpen(true)}
           >
-            <AIDraftingTool
+            {session?.lawyerProfile ? (
+              <LawyerCaseRequestsView
+                requestId={viewParams?.requestId}
+                lawyer={session.lawyerProfile}
+                onNavigate={handleNavigate}
+                onOpenCaseRoom={handleOpenCaseRoom}
+                onRefreshCases={refreshCases}
+              />
+            ) : (
+              <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+                <p className="text-slate-600">Lawyer profile is being verified.</p>
+              </div>
+            )}
+          </ProtectedRoute>
+        )}
+
+        {currentView === 'lawyer-cases' && (
+          <ProtectedRoute
+            currentUser={session?.user || null}
+            allowedRoles={['lawyer']}
+            attemptedPath="/lawyer/cases"
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onNavigateHome={() => handleNavigate('home')}
+            onSwitchAccountClick={() => setAuthModalOpen(true)}
+          >
+            {session?.lawyerProfile ? (
+              <LawyerCasesView
+                cases={cases}
+                lawyer={session.lawyerProfile}
+                onOpenCaseRoom={handleOpenCaseRoom}
+                onNavigate={handleNavigate}
+              />
+            ) : (
+              <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+                <p className="text-slate-600">Lawyer profile is being verified.</p>
+              </div>
+            )}
+          </ProtectedRoute>
+        )}
+
+        {currentView === 'lawyer-clients' && (
+          <ProtectedRoute
+            currentUser={session?.user || null}
+            allowedRoles={['lawyer']}
+            attemptedPath="/lawyer/clients"
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onNavigateHome={() => handleNavigate('home')}
+            onSwitchAccountClick={() => setAuthModalOpen(true)}
+          >
+            {session?.lawyerProfile ? (
+              <LawyerClientsView
+                lawyer={session.lawyerProfile}
+                onOpenCaseRoom={handleOpenCaseRoom}
+                onNavigate={handleNavigate}
+              />
+            ) : (
+              <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+                <p className="text-slate-600">Lawyer profile is being verified.</p>
+              </div>
+            )}
+          </ProtectedRoute>
+        )}
+
+        {(currentView === 'lawyer-verification' || currentView === 'lawyer-profile-manage') && (
+          <ProtectedRoute
+            currentUser={session?.user || null}
+            allowedRoles={['lawyer']}
+            attemptedPath="/lawyer/verification"
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onNavigateHome={() => handleNavigate('home')}
+            onSwitchAccountClick={() => setAuthModalOpen(true)}
+          >
+            {session?.lawyerProfile ? (
+              <LawyerVerificationView
+                lawyer={session.lawyerProfile}
+                onNavigate={handleNavigate}
+                onRefreshProfile={refreshCases}
+              />
+            ) : (
+              <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+                <p className="text-slate-600">Lawyer profile is being verified.</p>
+              </div>
+            )}
+          </ProtectedRoute>
+        )}
+
+        {(currentView === 'lawyer-legal-research' || currentView === 'judgment-search' || currentView === 'lawyer-judgments') && (
+          <ProtectedRoute
+            currentUser={session?.user || null}
+            allowedRoles={['lawyer']}
+            attemptedPath="/lawyer/legal-research"
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onNavigateHome={() => handleNavigate('home')}
+            onSwitchAccountClick={() => setAuthModalOpen(true)}
+          >
+            <AdvocateLegalResearchView
               cases={cases}
-              onAttachToCase={() => {
-                refreshCases();
+              onNavigateToDrafting={(authority, caseId) => {
+                setPreloadedAuthorityForDraft(authority);
+                handleNavigate('lawyer-drafting', { caseId });
               }}
+              onNavigate={handleNavigate}
             />
           </ProtectedRoute>
         )}
 
-        {currentView === 'judgment-search' && (
+        {(currentView === 'lawyer-drafting' || currentView === 'ai-drafting') && (
           <ProtectedRoute
             currentUser={session?.user || null}
             allowedRoles={['lawyer']}
-            attemptedPath="/lawyer/judgment-search"
+            attemptedPath="/lawyer/drafting"
             onOpenAuth={() => setAuthModalOpen(true)}
             onNavigateHome={() => handleNavigate('home')}
             onSwitchAccountClick={() => setAuthModalOpen(true)}
           >
-            <JudgmentSearchTool />
+            <AdvocateDraftingWorkspace
+              cases={cases}
+              preloadedAuthority={preloadedAuthorityForDraft}
+              preselectedCaseId={viewParams?.caseId}
+              onNavigateToResearch={() => handleNavigate('lawyer-legal-research')}
+              onNavigateToDrafts={() => handleNavigate('lawyer-drafts')}
+              onOpenCaseRoom={handleOpenCaseRoom}
+            />
+          </ProtectedRoute>
+        )}
+
+        {currentView === 'lawyer-drafts' && (
+          <ProtectedRoute
+            currentUser={session?.user || null}
+            allowedRoles={['lawyer']}
+            attemptedPath="/lawyer/drafts"
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onNavigateHome={() => handleNavigate('home')}
+            onSwitchAccountClick={() => setAuthModalOpen(true)}
+          >
+            <AdvocateDraftsListView
+              cases={cases}
+              onOpenDraftInWorkspace={(draft) => {
+                handleNavigate('lawyer-drafting', { caseId: draft.caseId });
+              }}
+              onNavigateToDrafting={() => handleNavigate('lawyer-drafting')}
+              onNavigateToResearch={() => handleNavigate('lawyer-legal-research')}
+            />
           </ProtectedRoute>
         )}
 

@@ -188,6 +188,9 @@ export const LawyerDashboard: React.FC<LawyerDashboardProps> = ({
             </div>
 
             <div className="space-y-1">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-amber-400 font-mono">
+                Counselia Advocate Dashboard
+              </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl sm:text-2xl font-bold font-serif text-slate-100 tracking-tight">
                   Adv. {lawyer.fullName}
@@ -221,23 +224,33 @@ export const LawyerDashboard: React.FC<LawyerDashboardProps> = ({
               Case Requests ({incomingCases.length})
             </Button>
             <Button
+              id="lawyer-research-cta"
+              variant="outline"
+              size="sm"
+              className="bg-slate-900 text-slate-200 border-slate-700 hover:bg-slate-800"
+              leftIcon={<Scale className="w-3.5 h-3.5 text-amber-400" />}
+              onClick={() => onNavigate('lawyer-legal-research')}
+            >
+              Counselia Legal Research
+            </Button>
+            <Button
               id="lawyer-ai-drafting-cta"
               variant="primary"
               size="sm"
               leftIcon={<Sparkles className="w-3.5 h-3.5" />}
               onClick={() => onNavigate('lawyer-drafting')}
             >
-              AI Drafting
+              Counselia AI Drafting
             </Button>
             <Button
-              id="lawyer-judgment-search-cta"
+              id="lawyer-drafts-cta"
               variant="outline"
               size="sm"
               className="bg-slate-900 text-slate-200 border-slate-700 hover:bg-slate-800"
-              leftIcon={<Scale className="w-3.5 h-3.5 text-sky-400" />}
-              onClick={() => onNavigate('lawyer-judgments')}
+              leftIcon={<FileText className="w-3.5 h-3.5 text-slate-300" />}
+              onClick={() => onNavigate('lawyer-drafts')}
             >
-              Judgments
+              Counselia Drafts
             </Button>
           </div>
         </div>
@@ -319,6 +332,119 @@ export const LawyerDashboard: React.FC<LawyerDashboardProps> = ({
           </div>
         </Card>
       )}
+
+      {/* 4. ADVOCATE PRACTICE SUITE: LEGAL RESEARCH & AI DRAFTING */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base sm:text-lg font-bold font-serif text-slate-900 flex items-center gap-2">
+              <Scale className="w-5 h-5 text-amber-700" />
+              Advocate Practice Suite: Precedent Research & AI Drafting
+            </h2>
+            <p className="text-xs text-slate-500">
+              Verified judicial search and formal Indian pleading drafting workspace (Advocate-Only).
+            </p>
+          </div>
+          <span className="text-xs font-bold text-amber-900 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full hidden sm:inline-flex">
+            Advocate Exclusive
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card
+            variant="default"
+            hoverEffect
+            className="p-5 border-amber-200/80 bg-gradient-to-br from-amber-50/40 to-white flex flex-col justify-between gap-3 cursor-pointer"
+            onClick={() => onNavigate('lawyer-legal-research')}
+          >
+            <div className="space-y-2">
+              <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center text-amber-900">
+                <Scale className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Legal Precedent Research</h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Search verified Supreme Court & High Court judgments by section, act, or citation. Save authorities directly to active case dockets.
+                </p>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-amber-100 flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-amber-900 font-mono">/lawyer/legal-research</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onNavigate('lawyer-legal-research')}
+                rightIcon={<ArrowRight className="w-3 h-3" />}
+                className="text-xs font-semibold text-amber-900 bg-white"
+              >
+                Search Law
+              </Button>
+            </div>
+          </Card>
+
+          <Card
+            variant="default"
+            hoverEffect
+            className="p-5 border-amber-200/80 bg-gradient-to-br from-amber-50/40 to-white flex flex-col justify-between gap-3 cursor-pointer"
+            onClick={() => onNavigate('lawyer-drafting')}
+          >
+            <div className="space-y-2">
+              <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center text-amber-900">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">AI Drafting Workspace</h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Generate first-draft legal notices, bail pleas, written statements, and consumer complaints with strict anti-hallucination placeholders.
+                </p>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-amber-100 flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-amber-900 font-mono">/lawyer/drafting</span>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => onNavigate('lawyer-drafting')}
+                rightIcon={<ArrowRight className="w-3 h-3" />}
+                className="text-xs font-semibold"
+              >
+                Open Studio
+              </Button>
+            </div>
+          </Card>
+
+          <Card
+            variant="default"
+            hoverEffect
+            className="p-5 border-slate-200 bg-white flex flex-col justify-between gap-3 cursor-pointer"
+            onClick={() => onNavigate('lawyer-drafts')}
+          >
+            <div className="space-y-2">
+              <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-800">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Pleading Repository & Drafts</h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Manage saved drafts with complete version history. Export formatted Word (.docx) documents, print PDFs, or share with clients.
+                </p>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-600 font-mono">/lawyer/drafts</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onNavigate('lawyer-drafts')}
+                rightIcon={<ArrowRight className="w-3 h-3" />}
+                className="text-xs font-semibold text-slate-800"
+              >
+                View Drafts
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </div>
 
       {/* 4. TWO-COLUMN SPLIT: NEW CASE REQUESTS & UPCOMING HEARINGS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

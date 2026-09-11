@@ -1,6 +1,6 @@
 {
-  "name": "LAWShin - Legal Redressal & Lawyer Platform",
-  "description": "LAWShin connects people needing legal help with verified Indian advocates and law firms, featuring secure case rooms, evidence management, and AI drafting tools.",
+  "name": "Counselia | Legal Redressal & Advocate Platform",
+  "description": "Counselia is a legal-tech platform connecting clients with verified advocates, secure case management, legal research and AI-assisted legal drafting.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

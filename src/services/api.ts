@@ -14,7 +14,12 @@ import {
   LegalQuery,
   VerifiedJudgment,
   ProposalCaseStage,
-  ImplementationState
+  ImplementationState,
+  LegalDeadline,
+  VerifiedLegalRule,
+  AdvocateDraft,
+  AdvocateSavedAuthority,
+  AdvocateAuditLog
 } from '../types.js';
 
 export interface SessionData {
@@ -36,12 +41,13 @@ export class ApiError extends Error {
   }
 }
 
-const TOKEN_KEY = 'lawshin_auth_token';
+const TOKEN_KEY = 'counselia_auth_token';
+const LEGACY_TOKEN_KEY = 'lawshin_auth_token';
 
 export const authStorage = {
   getToken(): string | null {
     try {
-      return localStorage.getItem(TOKEN_KEY);
+      return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
     } catch {
       return null;
     }
@@ -49,11 +55,13 @@ export const authStorage = {
   setToken(token: string) {
     try {
       localStorage.setItem(TOKEN_KEY, token);
+      localStorage.setItem(LEGACY_TOKEN_KEY, token);
     } catch {}
   },
   clearToken() {
     try {
       localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(LEGACY_TOKEN_KEY);
     } catch {}
   }
 };
@@ -277,44 +285,61 @@ export const api = {
     filingNumber?: string;
     notes?: string;
   }): Promise<{ success: boolean; case: LegalCase }> {
-    const res = await fetch(`/api/cases/${id}/stage`, {
+    const res = await customFetch(`/api/cases/${id}/stage`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    if (!res.ok) throw new Error('Failed to update case stage');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to update case stage' }));
+      throw new ApiError(err.message || err.error || 'Failed to update case stage', res.status, err.code);
+    }
     return res.json();
   },
 
   async takeCaseAction(id: string, action: 'accept' | 'reject', notes?: string): Promise<{ success: boolean; case: LegalCase }> {
-    const res = await fetch(`/api/cases/${id}/action`, {
+    const res = await customFetch(`/api/cases/${id}/action`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, notes })
     });
-    if (!res.ok) throw new Error('Failed to perform case action');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to perform case action' }));
+      throw new ApiError(err.message || err.error || 'Failed to perform case action', res.status, err.code);
+    }
     return res.json();
   },
 
   // Case Room: Messages
   async getCaseMessages(caseId: string): Promise<{ messages: CaseMessage[] }> {
-    const res = await fetch(`/api/cases/${caseId}/messages`);
+    const res = await customFetch(`/api/cases/${caseId}/messages`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to fetch messages' }));
+      throw new ApiError(err.message || err.error || 'Failed to fetch messages', res.status, err.code);
+    }
     return res.json();
   },
 
   async sendCaseMessage(caseId: string, content: string, attachments?: any[]): Promise<{ success: boolean; message: CaseMessage }> {
-    const res = await fetch(`/api/cases/${caseId}/messages`, {
+    const res = await customFetch(`/api/cases/${caseId}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content, attachments })
     });
-    if (!res.ok) throw new Error('Failed to send message');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to send message' }));
+      throw new ApiError(err.message || err.error || 'Failed to send message', res.status, err.code);
+    }
     return res.json();
   },
 
   // Case Room: Documents
   async getCaseDocuments(caseId: string): Promise<{ documents: CaseDocument[] }> {
-    const res = await fetch(`/api/cases/${caseId}/documents`);
+    const res = await customFetch(`/api/cases/${caseId}/documents`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to fetch documents' }));
+      throw new ApiError(err.message || err.error || 'Failed to fetch documents', res.status, err.code);
+    }
     return res.json();
   },
 
@@ -325,19 +350,42 @@ export const api = {
     fileName: string;
     fileSize: string;
     category: 'evidence' | 'notice' | 'reply' | 'order' | 'petition' | 'id_proof';
+    description?: string;
   }): Promise<{ success: boolean; document: CaseDocument }> {
-    const res = await fetch(`/api/cases/${caseId}/documents`, {
+    const res = await customFetch(`/api/cases/${caseId}/documents`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(docData)
     });
-    if (!res.ok) throw new Error('Failed to upload document');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to upload document' }));
+      throw new ApiError(err.message || err.error || 'Failed to upload document', res.status, err.code);
+    }
+    return res.json();
+  },
+
+  async downloadCaseDocument(caseId: string, docId: string): Promise<{
+    success: boolean;
+    document: CaseDocument;
+    downloadUrl: string;
+    checksumSha256: string;
+    section65BCertificate: any;
+  }> {
+    const res = await customFetch(`/api/cases/${caseId}/documents/${docId}/download`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to download document' }));
+      throw new ApiError(err.message || err.error || 'Failed to download document', res.status, err.code);
+    }
     return res.json();
   },
 
   // Case Room: Updates
   async getCaseUpdates(caseId: string): Promise<{ updates: CaseUpdate[] }> {
-    const res = await fetch(`/api/cases/${caseId}/updates`);
+    const res = await customFetch(`/api/cases/${caseId}/updates`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to fetch updates' }));
+      throw new ApiError(err.message || err.error || 'Failed to fetch updates', res.status, err.code);
+    }
     return res.json();
   },
 
@@ -348,12 +396,115 @@ export const api = {
     hearingOutcome?: string;
     orderDocumentUrl?: string;
   }): Promise<{ success: boolean; update: CaseUpdate }> {
-    const res = await fetch(`/api/cases/${caseId}/updates`, {
+    const res = await customFetch(`/api/cases/${caseId}/updates`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updateData)
     });
-    if (!res.ok) throw new Error('Failed to add case update');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to add case update' }));
+      throw new ApiError(err.message || err.error || 'Failed to add case update', res.status, err.code);
+    }
+    return res.json();
+  },
+
+  // Case Deadlines & Right-to-Remedy Tracker
+  async getCaseDeadlines(caseId: string): Promise<{
+    deadlines: LegalDeadline[];
+    disclaimer: string;
+    aiPolicyNotice: string;
+  }> {
+    const res = await customFetch(`/api/cases/${caseId}/deadlines`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to fetch deadlines' }));
+      throw new ApiError(err.message || err.error || 'Failed to fetch deadlines', res.status, err.code);
+    }
+    return res.json();
+  },
+
+  async createCaseDeadline(
+    caseId: string,
+    data: {
+      title: string;
+      deadlineType: string;
+      startDate: string;
+      deadlineDate?: string;
+      calculationSource: 'manual_lawyer_entry' | 'verified_rule_engine';
+      ruleId?: string;
+      remedyActionRequired?: string;
+      governingForum?: string;
+      description?: string;
+      notes?: string;
+    }
+  ): Promise<{ success: boolean; deadline: LegalDeadline; message: string }> {
+    const res = await customFetch(`/api/cases/${caseId}/deadlines`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to record deadline' }));
+      throw new ApiError(err.message || err.error || 'Failed to record deadline', res.status, err.code);
+    }
+    return res.json();
+  },
+
+  async updateCaseDeadline(
+    caseId: string,
+    deadlineId: string,
+    data: Partial<LegalDeadline>
+  ): Promise<{ success: boolean; deadline: LegalDeadline }> {
+    const res = await customFetch(`/api/cases/${caseId}/deadlines/${deadlineId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to update deadline' }));
+      throw new ApiError(err.message || err.error || 'Failed to update deadline', res.status, err.code);
+    }
+    return res.json();
+  },
+
+  async deleteCaseDeadline(
+    caseId: string,
+    deadlineId: string
+  ): Promise<{ success: boolean; message: string }> {
+    const res = await customFetch(`/api/cases/${caseId}/deadlines/${deadlineId}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to delete deadline' }));
+      throw new ApiError(err.message || err.error || 'Failed to delete deadline', res.status, err.code);
+    }
+    return res.json();
+  },
+
+  async getVerifiedLegalRules(): Promise<{
+    rules: VerifiedLegalRule[];
+    disclaimer: string;
+    aiPolicyNotice: string;
+  }> {
+    const res = await customFetch('/api/legal-rules/verified');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to fetch verified rules' }));
+      throw new ApiError(err.message || err.error || 'Failed to fetch verified rules', res.status, err.code);
+    }
+    return res.json();
+  },
+
+  async checkDeadlineNotifications(caseId: string): Promise<{
+    success: boolean;
+    notificationsCreated: number;
+    deadlines: LegalDeadline[];
+  }> {
+    const res = await customFetch(`/api/cases/${caseId}/deadlines/check-notifications`, {
+      method: 'POST'
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to scan notifications' }));
+      throw new ApiError(err.message || err.error || 'Failed to scan notifications', res.status, err.code);
+    }
     return res.json();
   },
 
@@ -384,9 +535,130 @@ export const api = {
     return res.json();
   },
 
-  // Payments & Invoices
-  async getPayments(): Promise<{ payments: Payment[] }> {
-    const res = await fetch('/api/payments');
+  // Payments & Invoices (Razorpay Ready Architecture)
+  async getPayments(params?: { status?: string; caseId?: string }): Promise<{
+    payments: Payment[];
+    isDemoMode: boolean;
+    providerName: string;
+    disclaimer?: string;
+  }> {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.caseId) query.append('caseId', params.caseId);
+    const url = `/api/payments${query.toString() ? `?${query.toString()}` : ''}`;
+    const res = await fetch(url);
+    return res.json();
+  },
+
+  async getPaymentById(id: string): Promise<{
+    payment: Payment;
+    case?: LegalCase;
+    invoice?: Invoice;
+    isDemoMode: boolean;
+    providerName: string;
+  }> {
+    const res = await fetch(`/api/payments/${id}`);
+    if (!res.ok) throw new Error('Payment requirement not found');
+    return res.json();
+  },
+
+  async initializePayment(data: {
+    paymentId?: string;
+    caseId?: string;
+    amount?: number;
+    serviceCategory?: string;
+  }): Promise<{ success: boolean; payment: Payment; order: any }> {
+    const res = await fetch('/api/payments/initialize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Payment initialization failed' }));
+      throw new Error(err.error || 'Payment initialization failed');
+    }
+    return res.json();
+  },
+
+  async verifyPayment(
+    id: string,
+    data: {
+      orderId: string;
+      razorpayPaymentId: string;
+      razorpaySignature: string;
+    }
+  ): Promise<{ success: boolean; payment: Payment; invoice: Invoice; case?: LegalCase; error?: string }> {
+    const res = await fetch(`/api/payments/${id}/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    if (!res.ok) {
+      throw new Error(result.error || 'Server-side payment verification failed');
+    }
+    return result;
+  },
+
+  async cancelPayment(id: string, reason?: string): Promise<{ success: boolean; payment: Payment }> {
+    const res = await fetch(`/api/payments/${id}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason })
+    });
+    if (!res.ok) throw new Error('Failed to cancel payment');
+    return res.json();
+  },
+
+  async refundPayment(id: string, reason?: string): Promise<{ success: boolean; payment: Payment }> {
+    const res = await fetch(`/api/payments/${id}/refund`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason })
+    });
+    if (!res.ok) throw new Error('Failed to refund payment');
+    return res.json();
+  },
+
+  async simulateDemoAuthorize(orderId: string): Promise<{ razorpayPaymentId: string; razorpaySignature: string }> {
+    const res = await fetch('/api/payments/demo-authorize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId })
+    });
+    if (!res.ok) throw new Error('Demo authorization failed');
+    return res.json();
+  },
+
+  async simulatePaymentFailure(id: string, reason?: string): Promise<{ success: boolean; payment: Payment }> {
+    const res = await fetch(`/api/payments/${id}/simulate-failure`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason })
+    });
+    if (!res.ok) throw new Error('Failed to simulate payment failure');
+    return res.json();
+  },
+
+  async resetPaymentToPending(id: string): Promise<{ success: boolean; payment: Payment }> {
+    const res = await fetch(`/api/payments/${id}/reset-pending`, {
+      method: 'POST'
+    });
+    if (!res.ok) throw new Error('Failed to reset payment to pending');
+    return res.json();
+  },
+
+  async createDemoPendingRequirement(data?: {
+    caseId?: string;
+    amount?: number;
+    serviceCategory?: string;
+  }): Promise<{ success: boolean; payment: Payment }> {
+    const res = await fetch('/api/payments/create-demo-pending', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {})
+    });
+    if (!res.ok) throw new Error('Failed to create demo pending requirement');
     return res.json();
   },
 
@@ -416,9 +688,28 @@ export const api = {
     return res.json();
   },
 
-  // Appointments
+  // Appointments (Offline Chamber Consultations & Scheduling)
   async getAppointments(): Promise<{ appointments: Appointment[] }> {
     const res = await fetch('/api/appointments');
+    return res.json();
+  },
+
+  async getLawyerAvailability(lawyerId: string, date: string): Promise<{
+    lawyerId: string;
+    lawyerName: string;
+    chamberAddress: string;
+    consultationFee: number;
+    date: string;
+    slots: {
+      timeSlot: string;
+      isAvailable: boolean;
+      status: 'Available' | 'Requested' | 'Confirmed';
+      appointmentId?: string;
+      clientName?: string;
+    }[];
+  }> {
+    const res = await fetch(`/api/lawyers/${lawyerId}/availability?date=${encodeURIComponent(date)}`);
+    if (!res.ok) throw new Error('Failed to fetch advocate availability');
     return res.json();
   },
 
@@ -427,15 +718,38 @@ export const api = {
     caseId?: string;
     date: string;
     timeSlot: string;
-    mode: 'Video Call' | 'Phone Call' | 'Chamber Meeting';
+    location?: string;
+    locationType?: string;
+    mode?: string;
     notes?: string;
+    fee?: number;
   }): Promise<{ success: boolean; appointment: Appointment }> {
     const res = await fetch('/api/appointments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    if (!res.ok) throw new Error('Failed to schedule appointment');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to schedule consultation' }));
+      throw new Error(err.message || err.error || 'Failed to schedule consultation');
+    }
+    return res.json();
+  },
+
+  async updateAppointmentStatus(
+    id: string,
+    status: 'Requested' | 'Confirmed' | 'Completed' | 'Cancelled',
+    cancellationReason?: string
+  ): Promise<{ success: boolean; appointment: Appointment }> {
+    const res = await fetch(`/api/appointments/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, cancellationReason })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to update appointment status' }));
+      throw new Error(err.message || err.error || 'Failed to update appointment status');
+    }
     return res.json();
   },
 
@@ -473,7 +787,26 @@ export const api = {
     return res.json();
   },
 
-  // Reviews
+  // Reviews & Ratings (Verified Closed Case Policy)
+  async getReviewableCases(): Promise<{
+    cases: {
+      caseId: string;
+      caseNumber: string;
+      caseTitle: string;
+      caseCategory: string;
+      lawyerId: string;
+      lawyerName: string;
+      stage: string;
+      closedAt?: string;
+      hasReviewed: boolean;
+      review?: Review;
+    }[];
+  }> {
+    const res = await fetch('/api/client/reviewable-cases');
+    if (!res.ok) throw new Error('Failed to fetch reviewable cases');
+    return res.json();
+  },
+
   async getReviews(params?: { lawyerId?: string; minRating?: number; category?: string }): Promise<{ reviews: (Review & { lawyerName?: string; lawyerCity?: string; lawyerBarNumber?: string })[] }> {
     const query = new URLSearchParams();
     if (params?.lawyerId) query.set('lawyerId', params.lawyerId);
@@ -486,12 +819,12 @@ export const api = {
 
   async submitReview(data: {
     lawyerId: string;
-    caseId?: string;
+    caseId: string;
     rating: number;
-    comment: string;
-    writtenReview?: string;
+    writtenReview: string;
+    comment?: string;
     caseCategory?: string;
-  }): Promise<{ success: boolean; review: Review }> {
+  }): Promise<{ success: boolean; review: Review; message?: string }> {
     const res = await fetch('/api/reviews', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -500,6 +833,32 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to submit review' }));
       throw new Error(err.message || err.error || 'Failed to submit review');
+    }
+    return res.json();
+  },
+
+  async getAdminReviews(params?: { status?: string; search?: string }): Promise<{
+    success: boolean;
+    counts: { total: number; pending: number; approved: number; rejected: number };
+    reviews: (Review & { lawyerName?: string; lawyerCity?: string; caseTitle?: string })[];
+  }> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.search) query.set('search', params.search);
+    const res = await fetch(`/api/admin/reviews?${query.toString()}`);
+    if (!res.ok) throw new Error('Failed to fetch reviews for admin');
+    return res.json();
+  },
+
+  async moderateReview(id: string, status: 'approved' | 'rejected' | 'pending', notes?: string): Promise<{ success: boolean; review: Review }> {
+    const res = await fetch(`/api/admin/reviews/${id}/moderation`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, notes })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to moderate review' }));
+      throw new Error(err.message || err.error || 'Failed to moderate review');
     }
     return res.json();
   },
@@ -598,19 +957,27 @@ export const api = {
 
   // AI Drafting Tool
   async generateAiDraft(data: {
-    prompt: string;
+    documentType?: string;
+    describeNeed?: string;
+    additionalFacts?: string;
+    caseId?: string;
+    caseTitle?: string;
+    prompt?: string;
     draftType?: string;
     clientName?: string;
     opponentName?: string;
     amount?: string | number;
     facts?: string;
-  }): Promise<{ draft: string; disclaimer: string; generatedBy: string }> {
-    const res = await fetch('/api/ai/draft', {
+  }): Promise<{ draft: string; disclaimer: string; generatedBy?: string; success?: boolean }> {
+    const res = await customFetch('/api/ai/draft', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    if (!res.ok) throw new Error('AI drafting failed');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'The draft could not be generated at this time. Please try again.');
+    }
     return res.json();
   },
 
@@ -705,15 +1072,222 @@ export const api = {
     return res.json();
   },
 
-  // Judgment Search
-  async searchJudgments(q: string): Promise<{
-    query: string;
-    results: VerifiedJudgment[];
+  // Judgment & Law Search (Provider-backed Verified Database)
+  async searchJudgments(params: string | {
+    keywords?: string;
+    court?: string;
+    jurisdiction?: string;
+    date?: string;
+    subject?: string;
+  }): Promise<{
+    query: any;
+    results: {
+      id: string;
+      caseName: string;
+      citation: string;
+      court: string;
+      jurisdiction: string;
+      date: string;
+      relevantPassage: string;
+      source: string;
+      sourceUrl: string;
+      subject: string;
+      bench?: string;
+      legalSections?: string[];
+      isDemo: boolean;
+    }[];
     total: number;
-    message?: string;
+    isDemoMode: boolean;
+    providerName: string;
     disclaimer: string;
+    message?: string;
   }> {
-    const res = await fetch(`/api/judgments/search?q=${encodeURIComponent(q)}`);
+    let url = '/api/judgments/search';
+    if (typeof params === 'string') {
+      url += `?keywords=${encodeURIComponent(params)}`;
+    } else {
+      const qParams = new URLSearchParams();
+      if (params.keywords) qParams.set('keywords', params.keywords);
+      if (params.court) qParams.set('court', params.court);
+      if (params.jurisdiction) qParams.set('jurisdiction', params.jurisdiction);
+      if (params.date) qParams.set('date', params.date);
+      if (params.subject) qParams.set('subject', params.subject);
+      const qs = qParams.toString();
+      if (qs) url += `?${qs}`;
+    }
+    const res = await customFetch(url);
+    if (!res.ok) {
+      throw new Error('Failed to execute search on legal database');
+    }
+    return res.json();
+  },
+
+  // Advocate Legal Research API
+  async searchAdvocateResearch(params: {
+    keywords?: string;
+    q?: string;
+    issue?: string;
+    topic?: string;
+    caseName?: string;
+    section?: string;
+    act?: string;
+    court?: string;
+    year?: string;
+    citation?: string;
+    jurisdiction?: string;
+  }): Promise<{
+    results: any[];
+    total: number;
+    isDemoMode: boolean;
+    providerName: string;
+    disclaimer: string;
+    searchParams: any;
+  }> {
+    const qParams = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v) qParams.set(k, String(v));
+    });
+    const res = await customFetch(`/api/lawyer/legal-research?${qParams.toString()}`);
+    if (!res.ok) throw new ApiError('Failed to execute advocate legal research', res.status);
+    return res.json();
+  },
+
+  // Save Authority to Case
+  async saveAuthorityToCase(caseId: string, authority: any, notes?: string): Promise<{
+    success: boolean;
+    authority: AdvocateSavedAuthority;
+  }> {
+    const res = await customFetch('/api/lawyer/judgments/save-to-case', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caseId, authority, notes })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to save authority to case' }));
+      throw new ApiError(err.error || 'Failed to save authority', res.status);
+    }
+    return res.json();
+  },
+
+  // Get Case Authorities
+  async getCaseAuthorities(caseId: string): Promise<{ authorities: AdvocateSavedAuthority[] }> {
+    const res = await customFetch(`/api/lawyer/cases/${caseId}/authorities`);
+    if (!res.ok) throw new ApiError('Failed to fetch case authorities', res.status);
+    return res.json();
+  },
+
+  // Delete Case Authority
+  async deleteCaseAuthority(caseId: string, authorityId: string): Promise<{ success: boolean }> {
+    const res = await customFetch(`/api/lawyer/cases/${caseId}/authorities/${authorityId}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) throw new ApiError('Failed to delete saved authority', res.status);
+    return res.json();
+  },
+
+  // Advocate Drafts: List
+  async getAdvocateDrafts(params?: { caseId?: string; status?: string; documentType?: string }): Promise<{
+    drafts: AdvocateDraft[];
+  }> {
+    const qParams = new URLSearchParams();
+    if (params?.caseId) qParams.set('caseId', params.caseId);
+    if (params?.status) qParams.set('status', params.status);
+    if (params?.documentType) qParams.set('documentType', params.documentType);
+    const qs = qParams.toString();
+    const res = await customFetch(`/api/lawyer/drafts${qs ? `?${qs}` : ''}`);
+    if (!res.ok) throw new ApiError('Failed to fetch advocate drafts', res.status);
+    return res.json();
+  },
+
+  // Advocate Drafts: Get single
+  async getAdvocateDraft(id: string): Promise<{ draft: AdvocateDraft }> {
+    const res = await customFetch(`/api/lawyer/drafts/${id}`);
+    if (!res.ok) throw new ApiError('Failed to fetch draft details', res.status);
+    return res.json();
+  },
+
+  // Advocate Drafts: Create
+  async createAdvocateDraft(data: Partial<AdvocateDraft>): Promise<{ success: boolean; draft: AdvocateDraft }> {
+    const res = await customFetch('/api/lawyer/drafts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to create draft' }));
+      throw new ApiError(err.error || 'Failed to create draft', res.status);
+    }
+    return res.json();
+  },
+
+  // Advocate Drafts: Update
+  async updateAdvocateDraft(id: string, data: Partial<AdvocateDraft> & { changeSummary?: string; versionTitle?: string }): Promise<{
+    success: boolean;
+    draft: AdvocateDraft;
+  }> {
+    const res = await customFetch(`/api/lawyer/drafts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to update draft' }));
+      throw new ApiError(err.error || 'Failed to update draft', res.status);
+    }
+    return res.json();
+  },
+
+  // Advocate Drafts: Delete
+  async deleteAdvocateDraft(id: string): Promise<{ success: boolean }> {
+    const res = await customFetch(`/api/lawyer/drafts/${id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) throw new ApiError('Failed to delete draft', res.status);
+    return res.json();
+  },
+
+  // Advocate Drafts: Share with Client
+  async shareDraftWithClient(id: string): Promise<{
+    success: boolean;
+    draft: AdvocateDraft;
+    sharedDocument: CaseDocument;
+  }> {
+    const res = await customFetch(`/api/lawyer/drafts/${id}/share-with-client`, {
+      method: 'POST'
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to share draft with client' }));
+      throw new ApiError(err.error || 'Failed to share draft with client', res.status);
+    }
+    return res.json();
+  },
+
+  // Advocate Audit Logs
+  async getAdvocateAuditLogs(params?: { caseId?: string; action?: string }): Promise<{ logs: AdvocateAuditLog[] }> {
+    const qParams = new URLSearchParams();
+    if (params?.caseId) qParams.set('caseId', params.caseId);
+    if (params?.action) qParams.set('action', params.action);
+    const qs = qParams.toString();
+    const res = await customFetch(`/api/lawyer/audit-logs${qs ? `?${qs}` : ''}`);
+    if (!res.ok) throw new ApiError('Failed to fetch audit logs', res.status);
+    return res.json();
+  },
+
+  // Advocate Record Action in Audit Log
+  async recordAdvocateAudit(data: {
+    action: string;
+    actionLabel?: string;
+    details: string;
+    caseId?: string;
+    caseNumber?: string;
+    draftId?: string;
+  }): Promise<{ success: boolean; log: AdvocateAuditLog }> {
+    const res = await customFetch('/api/lawyer/audit-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new ApiError('Failed to record audit log', res.status);
     return res.json();
   }
 };

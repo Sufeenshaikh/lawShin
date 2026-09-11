@@ -20,7 +20,7 @@ export const Modal: React.FC<ModalProps> = ({
   children,
   footer,
   size = 'md',
-  id = 'lawshin-modal',
+  id = 'counselia-modal',
 }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

@@ -50,10 +50,130 @@ export function getSqliteDb(): DatabaseSync {
     dbInstance.exec(schemaSql);
   }
 
+  // Safe migration for payments table status check constraint
+  try {
+    const payTableSql = dbInstance.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'payments'").get() as { sql: string } | undefined;
+    if (payTableSql && payTableSql.sql.includes('CHECK(status')) {
+      dbInstance.exec(`
+        PRAGMA foreign_keys = OFF;
+        CREATE TABLE payments_migration (
+          id TEXT PRIMARY KEY,
+          case_id TEXT,
+          client_id TEXT NOT NULL,
+          lawyer_id TEXT,
+          case_number TEXT,
+          client_name TEXT,
+          lawyer_name TEXT,
+          service_category TEXT NOT NULL,
+          amount REAL NOT NULL,
+          gst_amount REAL DEFAULT 0,
+          total_amount REAL NOT NULL,
+          currency TEXT NOT NULL DEFAULT 'INR',
+          provider TEXT NOT NULL DEFAULT 'Razorpay',
+          transaction_id TEXT UNIQUE NOT NULL,
+          payment_method TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'Pending',
+          payment_date TEXT NOT NULL,
+          invoice_id TEXT,
+          refund_status TEXT DEFAULT 'none',
+          timestamps_created TEXT NOT NULL,
+          timestamps_completed TEXT,
+          is_demo INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO payments_migration SELECT * FROM payments;
+        DROP TABLE payments;
+        ALTER TABLE payments_migration RENAME TO payments;
+        CREATE INDEX IF NOT EXISTS idx_payments_client_id ON payments(client_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_case_id ON payments(case_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_transaction_id ON payments(transaction_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+        PRAGMA foreign_keys = ON;
+      `);
+    }
+  } catch (migErr) {
+    console.warn('Payments table migration notice:', migErr);
+  }
+
+  // Safe migration for appointments table to support location, cancellation_reason, and new status enum
+  try {
+    const appTableSql = dbInstance.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'appointments'").get() as { sql: string } | undefined;
+    if (appTableSql && (!appTableSql.sql.includes('location') || appTableSql.sql.includes("CHECK(status IN ('scheduled'"))) {
+      dbInstance.exec(`
+        PRAGMA foreign_keys = OFF;
+        CREATE TABLE appointments_migration (
+          id TEXT PRIMARY KEY,
+          client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
+          lawyer_id TEXT NOT NULL REFERENCES lawyers(id) ON DELETE RESTRICT,
+          case_id TEXT REFERENCES cases(id) ON DELETE SET NULL,
+          client_name TEXT NOT NULL,
+          lawyer_name TEXT NOT NULL,
+          case_title TEXT,
+          date TEXT NOT NULL,
+          time_slot TEXT NOT NULL,
+          location TEXT NOT NULL DEFAULT 'Chamber No. 342, Saket District Court, New Delhi',
+          type TEXT NOT NULL DEFAULT 'offline',
+          mode TEXT NOT NULL DEFAULT 'Offline Chamber Meeting',
+          status TEXT NOT NULL DEFAULT 'Requested' CHECK(status IN ('Requested', 'Confirmed', 'Completed', 'Cancelled', 'scheduled', 'completed', 'cancelled')),
+          notes TEXT,
+          fee REAL DEFAULT 0,
+          meeting_link TEXT,
+          cancellation_reason TEXT,
+          is_demo INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO appointments_migration (
+          id, client_id, lawyer_id, case_id, client_name, lawyer_name, case_title,
+          date, time_slot, location, type, mode, status, notes, fee, meeting_link,
+          is_demo, created_at, updated_at
+        )
+        SELECT 
+          id, client_id, lawyer_id, case_id, client_name, lawyer_name, case_title,
+          date, time_slot, 'Chamber No. 342, Lawyers Chamber Block, Saket District Court, New Delhi', type, mode,
+          CASE WHEN status = 'scheduled' THEN 'Confirmed' ELSE status END,
+          notes, fee, meeting_link, is_demo, created_at, updated_at
+        FROM appointments;
+        DROP TABLE appointments;
+        ALTER TABLE appointments_migration RENAME TO appointments;
+        CREATE INDEX IF NOT EXISTS idx_appointments_client_id ON appointments(client_id);
+        CREATE INDEX IF NOT EXISTS idx_appointments_lawyer_id ON appointments(lawyer_id);
+        CREATE INDEX IF NOT EXISTS idx_appointments_case_id ON appointments(case_id);
+        CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(date);
+        CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);
+        CREATE INDEX IF NOT EXISTS idx_appointments_is_demo ON appointments(is_demo);
+        PRAGMA foreign_keys = ON;
+      `);
+    }
+  } catch (appMigErr) {
+    console.warn('Appointments table migration notice:', appMigErr);
+  }
+
+  // Safe migration for reviews table to ensure moderation_notes column
+  try {
+    const revTableSql = dbInstance.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'reviews'").get() as { sql: string } | undefined;
+    if (revTableSql && !revTableSql.sql.includes('moderation_notes')) {
+      dbInstance.exec(`ALTER TABLE reviews ADD COLUMN moderation_notes TEXT;`);
+    }
+  } catch (revMigErr) {
+    console.warn('Reviews table migration notice:', revMigErr);
+  }
+
   // Check if database needs seeding with baseline demo data
   const userCountRow = dbInstance.prepare('SELECT COUNT(*) as count FROM users;').get() as { count: number };
   if (userCountRow.count === 0) {
     seedInitialDemoData(dbInstance);
+  }
+
+  // Ensure case_deadlines table is seeded if empty
+  try {
+    const deadlineCountRow = dbInstance.prepare('SELECT COUNT(*) as count FROM case_deadlines;').get() as { count: number };
+    if (deadlineCountRow.count === 0) {
+      seedInitialDeadlines(dbInstance);
+    }
+  } catch (err) {
+    console.warn('[SQLite] Deadline check or seeding notice:', err);
   }
 
   return dbInstance;
@@ -151,7 +271,7 @@ function seedInitialDemoData(db: DatabaseSync): void {
     {
       id: 'u_admin_1',
       name: 'Chief Registrar & Compliance Admin',
-      email: 'admin@lawshin.in',
+      email: 'admin@counselia.in',
       phone: '+91 11 4050 9999',
       role: 'admin',
       password: 'Password@123',
@@ -1121,7 +1241,162 @@ function seedInitialDemoData(db: DatabaseSync): void {
     '2024-01-01T00:00:00Z'
   );
 
-  console.log('[LAWShin Database] Initial baseline DEMO DATA seeded successfully into SQLite with is_demo = 1.');
+  console.log('[Counselia Database] Initial baseline DEMO DATA seeded successfully into SQLite with is_demo = 1.');
+}
+
+/**
+ * Seed initial baseline deadlines for demo cases.
+ * Calibrated so all 4 statuses (🟢 Safe, 🟡 Approaching, 🔴 Urgent, ⚫ Expired)
+ * are immediately visible and testable!
+ */
+export function seedInitialDeadlines(db: DatabaseSync): void {
+  const insertDeadline = db.prepare(`
+    INSERT INTO case_deadlines (
+      id, case_id, title, deadline_type, start_date, deadline_date,
+      description, calculation_source, entered_by_id, entered_by_name,
+      entered_by_role, verified_rule_reference, remedy_action_required,
+      governing_forum, is_completed, completed_at, notes, is_demo, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);
+  `);
+
+  const nowMs = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  // Compute clean YYYY-MM-DD strings relative to today
+  const toYMD = (timestamp: number) => new Date(timestamp).toISOString().split('T')[0];
+  const nowIso = new Date().toISOString();
+
+  // 1. 🔴 URGENT (2 days remaining) - Case 1: Written Statement filing under CPC Order VIII Rule 1
+  insertDeadline.run(
+    'dl_urgent_ws_1',
+    'case_1',
+    'Written Statement / Reply Filing under CPC Order VIII Rule 1',
+    'Written Statement / Reply Filing',
+    toYMD(nowMs - 28 * dayMs),
+    toYMD(nowMs + 2 * dayMs), // 2 days away => Urgent 🔴
+    'Mandatory 30-day statutory window from service of court summons to present written statement of defense.',
+    'verified_rule_engine',
+    'u_lawyer_1',
+    'Adv. Rajeshwar Sharma',
+    'lawyer',
+    JSON.stringify({
+      ruleId: 'cpc_order_viii_rule_1',
+      actTitle: 'Code of Civil Procedure, 1908 (CPC)',
+      sectionOrArticle: 'Order VIII, Rule 1 (Written Statement by Defendant)',
+      citation: 'The Code of Civil Procedure, 1908 (Act No. 5 of 1908), First Schedule, Order VIII, Rule 1'
+    }),
+    'Finalize and submit formal Written Statement with supporting affidavit of admission/denial before Saket District Court.',
+    'Saket District Court (Courtroom 302)',
+    0,
+    null,
+    'Client provided WhatsApp chats and move-out handover receipt. Draft reply prepared.',
+    nowIso,
+    nowIso
+  );
+
+  // 2. 🟡 APPROACHING (9 days remaining) - Case 1: Evidence / Rejoinder by Way of Affidavit
+  insertDeadline.run(
+    'dl_appr_evid_1',
+    'case_1',
+    'Evidence & Rejoinder by Way of Affidavit',
+    'Evidence / Rejoinder Submission',
+    toYMD(nowMs - 12 * dayMs),
+    toYMD(nowMs + 9 * dayMs), // 9 days away => Approaching 🟡
+    'Submit counter-evidence regarding landlord deduction claims for flat painting.',
+    'manual_lawyer_entry',
+    'u_lawyer_1',
+    'Adv. Rajeshwar Sharma',
+    'lawyer',
+    null,
+    'Compile certified bank ledger statement showing deposit transfer and tenant move-out inspection video.',
+    'Saket District Court (Courtroom 302)',
+    0,
+    null,
+    'Bank account statement stamped by SBI branch received.',
+    nowIso,
+    nowIso
+  );
+
+  // 3. 🟢 SAFE (540 days remaining) - Case 1: Limitation Act Art 113 Residuary Limitation
+  insertDeadline.run(
+    'dl_safe_lim_1',
+    'case_1',
+    'Recovery of Debt / Movable Property Statutory Limitation (Art. 113)',
+    'Statutory Limitation Period',
+    toYMD(nowMs - 120 * dayMs),
+    toYMD(nowMs + 540 * dayMs), // ~1.5 years away => Safe 🟢
+    '3-year statutory limitation period under Limitation Act 1963 for suit for recovery of withheld security deposit.',
+    'verified_rule_engine',
+    'u_lawyer_1',
+    'Adv. Rajeshwar Sharma',
+    'lawyer',
+    JSON.stringify({
+      ruleId: 'limitation_act_art_113',
+      actTitle: 'The Limitation Act, 1963',
+      sectionOrArticle: 'Article 113 (Residuary Limitation for Suits)',
+      citation: 'The Limitation Act, 1963 (Act No. 36 of 1963), Schedule, Part X, Article 113'
+    }),
+    'Preserve formal postal tracking slip and landlord notice refusal memo to establish limitation continuity.',
+    'Civil Courts, New Delhi',
+    0,
+    null,
+    'Speed post acknowledgment card archived in case document registry.',
+    nowIso,
+    nowIso
+  );
+
+  // 4. ⚫ EXPIRED (Expired 18 days ago) - Case 1: 15-Day Statutory Cure Notice Response
+  insertDeadline.run(
+    'dl_exp_notice_1',
+    'case_1',
+    'Statutory 15-Day Legal Notice Cure Window for Landlord',
+    'Legal Notice Response',
+    toYMD(nowMs - 33 * dayMs),
+    toYMD(nowMs - 18 * dayMs), // 18 days ago => Expired ⚫
+    'Statutory cure window provided in demand notice demanding refund of Rs. 65,000 security deposit with 18% interest.',
+    'manual_lawyer_entry',
+    'u_lawyer_1',
+    'Adv. Rajeshwar Sharma',
+    'lawyer',
+    null,
+    'Notice period elapsed without restitution; advocate authorized to institute formal recovery plaint and seek costs.',
+    'Pre-Litigation Statutory Stage',
+    1,
+    toYMD(nowMs - 18 * dayMs),
+    'Notice period expired without compliance. Proceeded with filing of civil recovery suit.',
+    nowIso,
+    nowIso
+  );
+
+  // 5. 🔴 URGENT (2 days remaining) - Case 3: Cheque Bounce Sec 142(1)(b) NI Act Complaint
+  insertDeadline.run(
+    'dl_urgent_ni_3',
+    'case_3',
+    'Criminal Complaint Filing Deadline (Sec 142(1)(b) NI Act)',
+    'Statutory Limitation Period',
+    toYMD(nowMs - 28 * dayMs),
+    toYMD(nowMs + 2 * dayMs), // 2 days away => Urgent 🔴
+    'Mandatory 30-day statutory limitation period to file Section 138 criminal complaint upon expiration of 15-day notice period.',
+    'verified_rule_engine',
+    'u_lawyer_2',
+    'Adv. Ananya Sengupta',
+    'lawyer',
+    JSON.stringify({
+      ruleId: 'ni_act_sec_142_complaint',
+      actTitle: 'The Negotiable Instruments Act, 1881',
+      sectionOrArticle: 'Section 142(1)(b) (Filing of Criminal Complaint within 30 days)',
+      citation: 'The Negotiable Instruments Act, 1881, Section 142(1)(b)'
+    }),
+    'Lodge formal Section 138 complaint before Metropolitan Magistrate Court with original dishonoured cheque and return memo.',
+    'Metropolitan Magistrate Court, Esplanade, Mumbai',
+    0,
+    null,
+    'Original cheque deposit slip, return memo, and postal tracking report annexed.',
+    nowIso,
+    nowIso
+  );
+
+  console.log('[Counselia Database] Initial case deadlines seeded successfully with 🟢 Safe, 🟡 Approaching, 🔴 Urgent, and ⚫ Expired statuses.');
 }
 
 /**
@@ -1189,4 +1464,16 @@ export function checkMessageAccess(userId: string, userRole: string, messageId: 
   if (!msg) return false;
   if (msg.sender_id === userId) return true;
   return checkCaseAccess(userId, userRole, msg.case_id);
+}
+
+/**
+ * Verify whether a user is authorized to access a case deadline.
+ */
+export function checkDeadlineAccess(userId: string, userRole: string, deadlineId: string): boolean {
+  if (userRole === 'admin') return true;
+  const db = getSqliteDb();
+  const deadline = db.prepare('SELECT case_id, entered_by_id FROM case_deadlines WHERE id = ?').get(deadlineId) as any;
+  if (!deadline) return false;
+  if (deadline.entered_by_id === userId) return true;
+  return checkCaseAccess(userId, userRole, deadline.case_id);
 }

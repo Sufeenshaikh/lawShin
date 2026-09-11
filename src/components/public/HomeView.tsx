@@ -193,7 +193,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-2xl mx-auto mb-10">
           <Badge variant="warning" size="md">
-            How LAWShin Operates
+            How Counselia Operates
           </Badge>
           <h2 className="text-2xl sm:text-3xl font-bold font-serif text-slate-900 mt-2">
             Structured Grievance Redressal Architecture
@@ -378,7 +378,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => onNavigate('find-lawyer', { lawyerId: lawyer.id })}
+                      onClick={() => onNavigate('lawyer-profile', { lawyerId: lawyer.id })}
                     >
                       View Profile
                     </Button>
@@ -403,13 +403,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             <div className="lg:col-span-7 space-y-4">
               <Badge variant="warning" size="sm">
-                Privileged Digital Case Room & Audit Trail
+                Counselia Case Room & Audit Trail
               </Badge>
               <h2 className="text-2xl sm:text-3xl font-bold font-serif tracking-tight">
                 Track Every Case from Legal Notice to Decreed Order
               </h2>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                Unlike informal messaging apps, LAWShin standardizes every matter into an auditable statutory pipeline:
+                Unlike informal messaging apps, Counselia standardizes every matter into an auditable statutory pipeline:
                 <strong className="text-amber-300"> Notice Sent</strong>,{' '}
                 <strong className="text-amber-300">Reply Received</strong>,{' '}
                 <strong className="text-amber-300">In Court</strong>, and{' '}

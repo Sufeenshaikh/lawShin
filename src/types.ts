@@ -56,6 +56,7 @@ export interface LawyerProfile {
   languages: string[];
   city: string;
   state: string;
+  chamberAddress?: string;
   isDemo?: boolean;
 }
 
@@ -199,12 +200,29 @@ export interface LegalCase {
   isDemo?: boolean;
 }
 
+export type PaymentState =
+  | 'Pending'
+  | 'Processing'
+  | 'Successful'
+  | 'Failed'
+  | 'Refunded'
+  | 'Cancelled'
+  | 'pending'
+  | 'processing'
+  | 'successful'
+  | 'failed'
+  | 'refunded'
+  | 'cancelled'
+  | 'completed';
+
 export interface Payment {
   id: string;
   caseId?: string;
   caseNumber?: string;
+  caseTitle?: string;
   clientId: string;
   clientName: string;
+  clientEmail?: string;
   lawyerId?: string;
   lawyerName?: string;
   serviceCategory: string;
@@ -213,15 +231,25 @@ export interface Payment {
   totalAmount: number;
   currency?: string;
   provider?: string;
-  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  status: PaymentState;
   transactionId: string;
   paymentMethod: 'UPI' | 'Credit/Debit Card' | 'Net Banking' | 'Razorpay' | string;
   paymentDate: string;
   invoiceId: string;
+  invoiceNumber?: string;
+  orderId?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  razorpaySignature?: string;
   refundStatus?: 'none' | 'requested' | 'processed';
+  failureReason?: string;
   timestamps?: {
     created: string;
+    processing?: string;
     completed?: string;
+    failed?: string;
+    cancelled?: string;
+    refunded?: string;
   };
   isDemo?: boolean;
 }
@@ -245,6 +273,8 @@ export interface Invoice {
   isDemo?: boolean;
 }
 
+export type AppointmentStatus = 'Requested' | 'Confirmed' | 'Completed' | 'Cancelled';
+
 export interface Appointment {
   id: string;
   clientId: string;
@@ -255,11 +285,16 @@ export interface Appointment {
   caseTitle?: string;
   date: string;
   timeSlot: string;
-  status: 'scheduled' | 'completed' | 'cancelled';
-  mode: 'Video Call' | 'Phone Call' | 'Chamber Meeting';
+  location: string;
+  locationType?: 'chamber' | 'court' | 'client_premises' | 'custom' | string;
+  status: AppointmentStatus | 'scheduled';
+  mode: 'Offline Chamber Meeting' | 'Court Complex Consultation' | 'In-Person Consultation' | 'Video Call' | 'Phone Call' | string;
   notes?: string;
   fee?: number;
   meetingLink?: string;
+  cancellationReason?: string;
+  createdAt?: string;
+  updatedAt?: string;
   isDemo?: boolean;
 }
 
@@ -269,25 +304,31 @@ export interface Review {
   clientId: string;
   clientName: string;
   caseId?: string;
-  rating: number;
+  caseTitle?: string;
+  rating: number; // 1-5 stars
   comment: string;
-  writtenReview?: string;
+  writtenReview: string;
   caseCategory: string;
-  moderationStatus?: 'approved' | 'pending' | 'flagged' | 'rejected';
+  moderationStatus: 'pending' | 'approved' | 'rejected' | 'flagged';
+  moderationNotes?: string;
   createdAt: string;
   timestamp?: string;
   isVerifiedClient: boolean;
   isDemo?: boolean;
+  lawyerName?: string;
+  lawyerCity?: string;
+  lawyerBarNumber?: string;
 }
 
 export interface Notification {
   id: string;
   userId: string;
-  type: 'case_update' | 'new_message' | 'appointment' | 'payment' | 'verification' | 'system';
+  type: 'case_update' | 'new_message' | 'appointment' | 'payment' | 'verification' | 'system' | 'case_deadline';
   title: string;
   content: string;
-  entityType?: 'case' | 'appointment' | 'payment' | 'user';
+  entityType?: 'case' | 'appointment' | 'payment' | 'user' | 'deadline';
   entityId?: string;
+  link?: string;
   isRead: boolean;
   isDemo?: boolean;
   createdAt: string;
@@ -356,3 +397,174 @@ export interface PublicContent {
   createdAt: string;
   updatedAt: string;
 }
+
+// Right-to-Remedy / Deadline Tracker Types
+export type DeadlineStatus = 'safe' | 'approaching' | 'urgent' | 'expired';
+
+export type DeadlineType =
+  | 'Statutory Limitation Period'
+  | 'Legal Notice Response'
+  | 'Written Statement / Reply Filing'
+  | 'Appellate / Revision Window'
+  | 'Consumer Forum Complaint'
+  | 'Evidence / Rejoinder Submission'
+  | 'Court Order Compliance'
+  | 'Arbitration Notice / Claim'
+  | 'Right to Information (RTI) Appeal'
+  | 'Other Procedural Deadline';
+
+export type DeadlineCalculationSource =
+  | 'manual_lawyer_entry'
+  | 'verified_rule_engine';
+
+export interface VerifiedLegalRule {
+  ruleId: string;
+  actTitle: string;
+  sectionOrArticle: string;
+  standardPeriodDays: number;
+  description: string;
+  jurisdiction: string;
+  officialSourceCitation: string;
+  triggerEventDescription: string;
+}
+
+export interface LegalDeadline {
+  id: string;
+  caseId: string;
+  title: string; // Legal Deadline / Remedy Action Title
+  deadlineType: DeadlineType;
+  startDate: string; // YYYY-MM-DD
+  deadlineDate: string; // YYYY-MM-DD
+  daysRemaining: number;
+  status: DeadlineStatus;
+  description?: string;
+  calculationSource: DeadlineCalculationSource;
+  enteredById: string;
+  enteredByName: string;
+  enteredByRole: 'lawyer' | 'admin';
+  verifiedRuleReference?: {
+    ruleId?: string;
+    actTitle: string;
+    sectionOrArticle: string;
+    citation: string;
+  };
+  remedyActionRequired?: string;
+  governingForum?: string;
+  isCompleted?: boolean;
+  completedAt?: string;
+  notes?: string;
+  isDemo?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================================
+// ADVOCATE-ONLY LEGAL RESEARCH & AI DRAFTING TYPES
+// ============================================================================
+
+export type AdvocateDraftStatus =
+  | 'DRAFT'
+  | 'UNDER_REVIEW'
+  | 'UNDER REVIEW'
+  | 'REVIEWED'
+  | 'FINAL'
+  | 'FINALIZED';
+
+export type AdvocateDocumentType =
+  | 'Bail Application'
+  | 'Anticipatory Bail Application'
+  | 'Legal Notice'
+  | 'Reply to Legal Notice'
+  | 'Complaint'
+  | 'Plaint'
+  | 'Written Statement'
+  | 'Petition'
+  | 'Affidavit'
+  | 'Application'
+  | 'Representation'
+  | 'Custom Legal Document'
+  | string;
+
+export interface AdvocateSavedAuthority {
+  id: string;
+  caseId?: string;
+  caseNumber?: string;
+  lawyerId: string;
+  caseName: string;
+  citation: string;
+  court: string;
+  bench?: string;
+  decisionDate: string;
+  legalSections?: string[];
+  relevantPassage: string;
+  shortSummary?: string;
+  source: string;
+  sourceUrl?: string;
+  isVerified: boolean;
+  notes?: string;
+  addedAt: string;
+}
+
+export interface AdvocateDraftVersion {
+  id: string;
+  versionNumber: number;
+  content: string;
+  title: string;
+  status: AdvocateDraftStatus;
+  modifiedAt: string;
+  modifiedBy: string;
+  changeSummary?: string;
+}
+
+export interface AdvocateDraft {
+  id: string;
+  caseId?: string;
+  caseNumber?: string;
+  caseTitle?: string;
+  clientName?: string;
+  clientId?: string;
+  opponentName?: string;
+  lawyerId: string;
+  lawyerName: string;
+  documentType: AdvocateDocumentType;
+  title: string;
+  content: string;
+  courtDetails?: string;
+  courtName?: string;
+  jurisdiction?: string;
+  relevantSections?: string[];
+  authorities?: any[];
+  language?: string;
+  additionalInstructions?: string;
+  status: AdvocateDraftStatus;
+  isSharedWithClient: boolean;
+  sharedAt?: string;
+  versions: AdvocateDraftVersion[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AdvocateAuditAction =
+  | 'judgment_searched'
+  | 'judgment_opened'
+  | 'judgment_saved'
+  | 'authority_added_to_draft'
+  | 'draft_generated'
+  | 'draft_edited'
+  | 'draft_downloaded'
+  | 'draft_shared_with_client'
+  | 'draft_finalized';
+
+export interface AdvocateAuditLog {
+  id: string;
+  lawyerId: string;
+  lawyerName: string;
+  action: AdvocateAuditAction;
+  actionLabel: string;
+  details: string;
+  caseId?: string;
+  caseNumber?: string;
+  draftId?: string;
+  timestamp: string;
+}
+

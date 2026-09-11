@@ -1,5 +1,5 @@
 /**
- * LAWShin Standardized Design Tokens & Archetype Constants
+ * Counselia Standardized Design Tokens & Archetype Constants
  * Indian Legal-Tech Platform Design System
  */
 

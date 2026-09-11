@@ -28,8 +28,8 @@ interface MyCasesViewProps {
 }
 
 export const MyCasesView: React.FC<MyCasesViewProps> = ({
-  cases,
-  lawyers,
+  cases = [],
+  lawyers = [],
   onOpenCaseRoom,
   onSubmitCaseClick,
   onRefreshCases

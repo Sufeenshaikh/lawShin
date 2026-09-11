@@ -201,6 +201,32 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
         </div>
       )}
 
+      {/* 2b. PROMINENT PAYMENT REQUIREMENT ALERT (IF ANY CASE REQUIRES PAYMENT) */}
+      {cases.some((c) => c.implementationState === 'Payment Pending') && (
+        <div id="banner-dashboard-payment-pending" className="p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 border border-amber-200 flex items-center justify-center shrink-0">
+              <CreditCard className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-amber-900 text-sm">Advocate Retainer / Milestone Payment Required</p>
+              <p className="text-amber-800 text-xs mt-0.5">
+                An advocate has accepted your matter. Settle the statutory retainer deposit to activate representation and unlock the Case Room.
+              </p>
+            </div>
+          </div>
+          <Button
+            id="btn-dashboard-view-payment"
+            variant="primary"
+            size="sm"
+            onClick={() => onNavigate('client-payments')}
+            rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+          >
+            Review & Pay
+          </Button>
+        </div>
+      )}
+
       {/* 3. METRIC CARDS (RESPONSIVE GRID) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         <Card variant="default" className="p-4">

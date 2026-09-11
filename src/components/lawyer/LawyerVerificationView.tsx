@@ -44,8 +44,8 @@ export const LawyerVerificationView: React.FC<LawyerVerificationViewProps> = ({
   const [barCouncilNumber, setBarCouncilNumber] = useState(lawyer.barCouncilNumber || '');
   const [stateBarCouncil, setStateBarCouncil] = useState(lawyer.stateBarCouncil || 'Bar Council of Delhi');
   const [notes, setNotes] = useState(lawyer.verificationNotes || '');
-  const [certificateUrl, setCertificateUrl] = useState('https://lawshin.gov.in/registry/sanad-sample.pdf');
-  const [idCardUrl, setIdCardUrl] = useState('https://lawshin.gov.in/registry/bar-id-sample.pdf');
+  const [certificateUrl, setCertificateUrl] = useState('https://storage.counselia.internal/demo-samples/sanad-sample.pdf');
+  const [idCardUrl, setIdCardUrl] = useState('https://storage.counselia.internal/demo-samples/bar-id-sample.pdf');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
@@ -233,7 +233,7 @@ export const LawyerVerificationView: React.FC<LawyerVerificationViewProps> = ({
         <div className="space-y-1">
           <p className="font-bold text-white">Rule 36, Standards of Professional Conduct (Bar Council of India)</p>
           <p className="text-slate-300 leading-relaxed">
-            LAWShin strictly abides by Bar Council regulations. <strong>Only verified and approved advocates</strong> are displayed in the public advocate directory. Unverified or pending advocate profiles are strictly withheld from client public search results until certified.
+            Counselia strictly abides by Bar Council regulations. <strong>Only verified and approved advocates</strong> are displayed in the public advocate directory. Unverified or pending advocate profiles are strictly withheld from client public search results until certified.
           </p>
         </div>
       </div>

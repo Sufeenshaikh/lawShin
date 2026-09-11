@@ -30,7 +30,7 @@ export const ReviewCaseModal: React.FC<ReviewCaseModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isCaseClosed) {
-      setError('Under LAWShin policy, client reviews can only be submitted after case proceedings are concluded or closed by counsel.');
+      setError('Under Counselia policy, client reviews can only be submitted after case proceedings are concluded or closed by counsel.');
       return;
     }
     if (!caseData.lawyerId) {
@@ -127,14 +127,26 @@ export const ReviewCaseModal: React.FC<ReviewCaseModalProps> = ({
               </div>
             </div>
           ) : success ? (
-            <div className="p-6 text-center space-y-2">
+            <div className="p-6 text-center space-y-3">
               <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-bold text-slate-900">Review Submitted Successfully</h3>
-              <p className="text-slate-600 text-xs">
-                Thank you for contributing to transparent legal standards on LAWShin.
+              <h3 className="text-base font-bold text-slate-900">Review Submitted for Verification</h3>
+              <p className="text-slate-600 text-xs leading-relaxed max-w-sm mx-auto">
+                Thank you for your feedback. In accordance with Bar Council integrity standards, your review has been recorded with status <strong>Pending Moderation</strong>. Approved reviews are displayed publicly on the advocate’s profile.
               </p>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSuccess();
+                    onClose();
+                  }}
+                  className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">

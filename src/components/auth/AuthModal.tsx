@@ -260,7 +260,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold font-serif text-slate-900">
-                LAWShin Authentication & Access
+                Counselia Authentication & Access
               </h2>
               <p className="text-slate-500 text-[10px]">
                 {mode === 'login' && 'Sign in to access your confidential case room and caseload'}
@@ -344,7 +344,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   loading={loading}
                   rightIcon={<ArrowRight className="w-4 h-4" />}
                 >
-                  Sign In to LAWShin
+                  Sign In to Counselia
                 </Button>
               </form>
 

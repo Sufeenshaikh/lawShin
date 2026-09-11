@@ -7,7 +7,7 @@ interface FooterProps {
 
 export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
   return (
-    <footer id="lawshin-main-footer" className="bg-slate-950 text-slate-300 border-t border-slate-800">
+    <footer id="counselia-main-footer" className="bg-slate-950 text-slate-300 border-t border-slate-800">
       {/* Statutory Disclaimers Section */}
       <div className="border-b border-slate-800/80 bg-slate-900/60 py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
@@ -44,7 +44,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             </div>
           </div>
           <p className="text-[11px] text-slate-500 mt-4 leading-normal">
-            * Compliance Note: In accordance with Rule 36 of the Bar Council of India Rules, advocates enrolled with State Bar Councils are prohibited from advertising or soliciting work. LAWShin serves strictly as a technology facilitator for citizens seeking access to justice and redressal of legal grievances.
+            * Compliance Note: In accordance with Rule 36 of the Bar Council of India Rules, advocates enrolled with State Bar Councils are prohibited from advertising or soliciting work. Counselia serves strictly as a technology facilitator for citizens seeking access to justice and redressal of legal grievances.
           </p>
         </div>
       </div>
@@ -58,7 +58,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               <div className="w-8 h-8 rounded bg-amber-600 flex items-center justify-center text-slate-950">
                 <Scale className="w-4 h-4 text-slate-950 stroke-[2.5]" />
               </div>
-              <span className="text-xl font-bold tracking-tight text-white font-serif">LAW<span className="text-amber-500">Shin</span></span>
+              <span className="text-xl font-bold tracking-tight text-white font-serif">Counsel<span className="text-amber-500">ia</span></span>
             </div>
             <p className="text-xs text-slate-400 max-w-sm leading-relaxed mb-4">
               India's premier grievance redressal and verified legal consultation platform. Bridging the gap between aggrieved citizens and verified advocates with bank-grade confidential case rooms.
@@ -78,7 +78,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               <li><button onClick={() => onNavigate('find-firm')} className="hover:text-white transition-colors cursor-pointer">Law Firms Directory</button></li>
               <li><button onClick={() => onNavigate('queries')} className="hover:text-white transition-colors cursor-pointer">Free Anonymous Q&A</button></li>
               <li><button onClick={() => onNavigate('reviews')} className="hover:text-white transition-colors cursor-pointer">Reviews & Ratings</button></li>
-              <li><button onClick={() => onNavigate('about')} className="hover:text-white transition-colors cursor-pointer">About LAWShin</button></li>
+              <li><button onClick={() => onNavigate('about')} className="hover:text-white transition-colors cursor-pointer">About Counselia</button></li>
             </ul>
           </div>
 
@@ -109,14 +109,14 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </p>
               <p className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                <span>grievances@lawshin.in</span>
+                <span>grievances@counselia.in</span>
               </p>
             </div>
           </div>
         </div>
 
         <div className="mt-12 pt-6 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-3">
-          <p>© {new Date().getFullYear()} LAWShin Technologies India Pvt. Ltd. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Counselia Technologies India Pvt. Ltd. All rights reserved.</p>
           <div className="flex items-center gap-4 flex-wrap">
             <button onClick={() => onNavigate('terms')} className="hover:text-slate-300 cursor-pointer">Terms & Conditions</button>
             <button onClick={() => onNavigate('privacy')} className="hover:text-slate-300 cursor-pointer">Privacy Policy</button>

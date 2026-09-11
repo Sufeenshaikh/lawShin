@@ -7,13 +7,13 @@ export const AboutUsView: React.FC = () => {
       {/* Vision Header */}
       <div className="text-center space-y-3">
         <span className="text-xs font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
-          About LAWShin Legal-Tech
+          About Counselia Legal-Tech
         </span>
         <h1 className="text-3xl sm:text-4xl font-bold font-serif text-slate-900">
           Democratizing Access to Justice Across India
         </h1>
         <p className="text-sm text-slate-600 max-w-2xl mx-auto leading-relaxed">
-          LAWShin was founded to bring structure, transparency, and dignity to everyday citizen legal grievances through bank-grade technology and verified legal practice.
+          Counselia was founded to bring structure, transparency, and dignity to everyday citizen legal grievances through bank-grade technology and verified legal practice.
         </p>
       </div>
 
@@ -25,7 +25,7 @@ export const AboutUsView: React.FC = () => {
           </div>
           <h3 className="font-bold text-slate-900 text-base mb-2">Ethics & BCI Compliance</h3>
           <p className="text-xs text-slate-600 leading-relaxed">
-            LAWShin operates in strict accordance with the Advocates Act, 1961 and Bar Council of India Rules. We are not an advertising agency and do not tout or solicit cases.
+            Counselia operates in strict accordance with the Advocates Act, 1961 and Bar Council of India Rules. We are not an advertising agency and do not tout or solicit cases.
           </p>
         </div>
 
@@ -57,7 +57,7 @@ export const AboutUsView: React.FC = () => {
           <span>Statutory Statement under Rule 36, Bar Council of India Rules</span>
         </div>
         <p className="leading-relaxed">
-          As per the rules of the Bar Council of India, lawyers and advocates are prohibited from soliciting work or advertising in any manner. By using LAWShin, the user acknowledges that there has been no advertisement, personal communication, solicitation, invitation, or inducement of any sort whatsoever from us or any advocate on this platform to solicit any work through this website.
+          As per the rules of the Bar Council of India, lawyers and advocates are prohibited from soliciting work or advertising in any manner. By using Counselia, the user acknowledges that there has been no advertisement, personal communication, solicitation, invitation, or inducement of any sort whatsoever from us or any advocate on this platform to solicit any work through this website.
         </p>
         <p className="leading-relaxed text-slate-400">
           The purpose of this platform is purely informational and to facilitate structured communication, grievance documentation, and legal assistance between citizens and enrolled legal professionals.

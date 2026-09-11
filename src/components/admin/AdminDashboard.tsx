@@ -18,7 +18,10 @@ import {
   Check,
   Database,
   HardDrive,
-  Server
+  Server,
+  Star,
+  MessageSquare,
+  ShieldAlert
 } from 'lucide-react';
 import { LawyerProfile, LegalCase } from '../../types.js';
 import { api } from '../../services/api.js';
@@ -88,6 +91,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenCaseRoom }
   const [selectedLawyer, setSelectedLawyer] = useState<LawyerProfile | null>(null);
   const [verifyNotes, setVerifyNotes] = useState('Verified against State Bar Council Enrolment Register.');
 
+  // Review Moderation State
+  const [adminReviews, setAdminReviews] = useState<any[]>([]);
+  const [reviewCounts, setReviewCounts] = useState({ total: 0, pending: 0, approved: 0, rejected: 0 });
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  const [moderationActionLoading, setModerationActionLoading] = useState<string | null>(null);
+  const [moderationNoteInput, setModerationNoteInput] = useState<{ [reviewId: string]: string }>({});
+
   useEffect(() => {
     loadAdminData();
   }, []);
@@ -95,20 +105,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenCaseRoom }
   const loadAdminData = async () => {
     setLoading(true);
     try {
-      const [statsRes, lawRes, caseRes, dbRes] = await Promise.all([
+      const [statsRes, lawRes, caseRes, dbRes, reviewRes] = await Promise.all([
         api.getAdminStats(),
         api.getLawyers(),
         api.getCases(),
-        api.getDatabaseStats().catch(() => null)
+        api.getDatabaseStats().catch(() => null),
+        api.getAdminReviews().catch(() => ({ success: true, counts: { total: 0, pending: 0, approved: 0, rejected: 0 }, reviews: [] }))
       ]);
       setStats(statsRes);
       setLawyers(lawRes.lawyers);
       setCases(caseRes.cases);
       if (dbRes) setDbMetrics(dbRes);
+      if (reviewRes) {
+        setAdminReviews(reviewRes.reviews || []);
+        setReviewCounts(reviewRes.counts || { total: 0, pending: 0, approved: 0, rejected: 0 });
+      }
     } catch (err) {
       console.error('Failed to load admin telemetry:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleModerateReview = async (reviewId: string, status: 'approved' | 'rejected' | 'pending') => {
+    try {
+      setModerationActionLoading(reviewId);
+      const note = moderationNoteInput[reviewId] || (status === 'approved' ? 'Verified client of concluded matter.' : 'Does not meet objective evaluation criteria.');
+      await api.moderateReview(reviewId, status, note);
+      // Reload reviews
+      const updated = await api.getAdminReviews();
+      setAdminReviews(updated.reviews || []);
+      setReviewCounts(updated.counts || { total: 0, pending: 0, approved: 0, rejected: 0 });
+    } catch (err: any) {
+      alert(err.message || 'Failed to update review moderation status');
+    } finally {
+      setModerationActionLoading(null);
     }
   };
 
@@ -256,6 +287,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenCaseRoom }
             label: 'SQLite Database & Entities',
             icon: <Database className="w-3.5 h-3.5" />,
             count: 16,
+          },
+          {
+            id: 'reviews',
+            label: 'Client Reviews Moderation',
+            icon: <Star className="w-3.5 h-3.5" />,
+            count: reviewCounts.pending || undefined,
           },
         ]}
       />
@@ -470,7 +507,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenCaseRoom }
           <Card variant="default" className="p-5 space-y-3">
             <h3 className="text-sm font-bold text-slate-900">Compliance & Regulatory Disclaimers</h3>
             <p className="text-xs text-slate-600 leading-relaxed">
-              LAWShin operates strictly under the Bar Council of India (BCI) rules. All advocate fees are held in RBI-authorized banking escrow until contractual milestones are satisfied. Automated GST credit invoices under SAC 998211 are distributed immediately upon receipt.
+              Counselia operates strictly under the Bar Council of India (BCI) rules. All advocate fees are held in RBI-authorized banking escrow until contractual milestones are satisfied. Automated GST credit invoices under SAC 998211 are distributed immediately upon receipt.
             </p>
           </Card>
         </div>
@@ -720,6 +757,218 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenCaseRoom }
               </Table>
             </div>
           </Card>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: CLIENT REVIEWS MODERATION QUEUE */}
+      {/* ========================================================================= */}
+      {activeTab === 'reviews' && (
+        <div className="space-y-5">
+          {/* Policy Banner */}
+          <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200/80 text-amber-900 flex items-start gap-3 text-xs">
+            <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h4 className="font-bold text-amber-950">
+                Verified Closed Case Review Policy & Administrative Moderation
+              </h4>
+              <p className="text-amber-800/90 leading-relaxed">
+                Only clients with formally concluded matters (Closed or Resolved stage) are eligible to submit reviews for their assigned advocate.
+                Duplicate reviews for the same case are strictly rejected.
+                All client feedback requires administrative approval before appearing in the public advocate directory.
+              </p>
+            </div>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center gap-2">
+              {(['pending', 'approved', 'rejected', 'all'] as const).map((status) => {
+                const count =
+                  status === 'pending'
+                    ? reviewCounts.pending
+                    : status === 'approved'
+                    ? reviewCounts.approved
+                    : status === 'rejected'
+                    ? reviewCounts.rejected
+                    : reviewCounts.total;
+
+                const isActive = reviewStatusFilter === status;
+                return (
+                  <button
+                    key={status}
+                    onClick={() => setReviewStatusFilter(status)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      isActive
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="capitalize">{status}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                        isActive ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <span className="text-xs text-slate-500">
+              Showing {adminReviews.filter((r) => reviewStatusFilter === 'all' || r.moderationStatus === reviewStatusFilter).length} review records
+            </span>
+          </div>
+
+          {/* Reviews List */}
+          {adminReviews.filter((r) => reviewStatusFilter === 'all' || r.moderationStatus === reviewStatusFilter).length === 0 ? (
+            <Card variant="default" className="p-12 text-center space-y-2">
+              <MessageSquare className="w-8 h-8 text-slate-300 mx-auto" />
+              <p className="font-bold text-slate-800 text-sm">No reviews in this queue</p>
+              <p className="text-xs text-slate-500">
+                {reviewStatusFilter === 'pending'
+                  ? 'All submitted client reviews have been moderated.'
+                  : `No ${reviewStatusFilter} reviews found.`}
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {adminReviews
+                .filter((r) => reviewStatusFilter === 'all' || r.moderationStatus === reviewStatusFilter)
+                .map((rev) => {
+                  const isLoading = moderationActionLoading === rev.id;
+
+                  return (
+                    <Card key={rev.id} variant="default" className="p-5 space-y-4">
+                      {/* Top row */}
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-900 text-sm">{rev.clientName}</span>
+                            <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.2 rounded-full flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              Verified Client
+                            </span>
+                            <span className="text-xs text-slate-400 font-mono">• {rev.timestamp ? new Date(rev.timestamp).toLocaleDateString('en-IN') : 'Recent'}</span>
+                          </div>
+
+                          <p className="text-xs text-slate-600">
+                            Advocate: <strong className="text-slate-900">{rev.lawyerName}</strong> ({rev.lawyerCity}) • Matter:{' '}
+                            <span className="font-medium text-slate-800">{rev.caseTitle || rev.caseCategory}</span>
+                          </p>
+                        </div>
+
+                        {/* Status badge */}
+                        <div>
+                          {rev.moderationStatus === 'pending' && (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                              Pending Moderation
+                            </span>
+                          )}
+                          {rev.moderationStatus === 'approved' && (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              Approved & Public
+                            </span>
+                          )}
+                          {rev.moderationStatus === 'rejected' && (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-rose-50 text-rose-800 border border-rose-300">
+                              <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                              Rejected
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Stars & Written Review */}
+                      <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-200/80 text-xs">
+                        <div className="flex items-center gap-1 text-amber-500">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`w-4 h-4 ${
+                                i < rev.rating
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'text-slate-300'
+                              }`}
+                            />
+                          ))}
+                          <span className="ml-1.5 font-bold font-mono text-slate-800">
+                            {rev.rating} / 5 Stars
+                          </span>
+                        </div>
+
+                        <p className="text-slate-800 leading-relaxed font-sans text-xs">
+                          "{rev.writtenReview || rev.comment}"
+                        </p>
+
+                        {rev.moderationNotes && (
+                          <p className="text-[11px] text-slate-500 pt-2 border-t border-slate-200/60">
+                            <strong>Admin Note:</strong> {rev.moderationNotes}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Moderation Actions */}
+                      <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs">
+                        <input
+                          type="text"
+                          placeholder="Optional moderation note (e.g. Verified genuine representation)..."
+                          value={moderationNoteInput[rev.id] || ''}
+                          onChange={(e) =>
+                            setModerationNoteInput({
+                              ...moderationNoteInput,
+                              [rev.id]: e.target.value
+                            })
+                          }
+                          className="flex-1 p-2 border border-slate-300 rounded-lg text-xs"
+                        />
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {rev.moderationStatus !== 'approved' && (
+                            <Button
+                              variant="success"
+                              size="sm"
+                              isLoading={isLoading}
+                              onClick={() => handleModerateReview(rev.id, 'approved')}
+                              leftIcon={<Check className="w-3.5 h-3.5" />}
+                            >
+                              Approve & Publish
+                            </Button>
+                          )}
+
+                          {rev.moderationStatus !== 'rejected' && (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              isLoading={isLoading}
+                              onClick={() => handleModerateReview(rev.id, 'rejected')}
+                              leftIcon={<XCircle className="w-3.5 h-3.5" />}
+                            >
+                              Reject
+                            </Button>
+                          )}
+
+                          {rev.moderationStatus !== 'pending' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              isLoading={isLoading}
+                              onClick={() => handleModerateReview(rev.id, 'pending')}
+                            >
+                              Reset to Pending
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+            </div>
+          )}
         </div>
       )}
 

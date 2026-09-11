@@ -57,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header id="lawshin-main-header" className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200">
+    <header id="counselia-main-header" className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -72,7 +72,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xl font-bold tracking-tight text-slate-950 font-serif">LAW<span className="text-amber-600">Shin</span></span>
+                  <span className="text-xl font-bold tracking-tight text-slate-950 font-serif">Counsel<span className="text-amber-600">ia</span></span>
                   <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">IN</span>
                 </div>
                 <p className="text-[10px] text-slate-700 font-medium tracking-wide">Legal Redressal & Verified Advocates</p>
@@ -161,20 +161,28 @@ export const Header: React.FC<HeaderProps> = ({
                     Clients
                   </button>
                   <button
-                    id="nav-ai-drafting"
-                    onClick={() => onNavigate('ai-drafting')}
-                    className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1 ${currentView === 'ai-drafting' ? 'bg-amber-800 text-white' : 'text-amber-800 hover:bg-amber-100'}`}
+                    id="nav-lawyer-research"
+                    onClick={() => onNavigate('lawyer-legal-research')}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1 cursor-pointer ${currentView === 'lawyer-legal-research' || currentView === 'judgment-search' ? 'bg-amber-800 text-white' : 'text-slate-800 hover:bg-slate-100'}`}
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-700" />
-                    Drafting
+                    <Scale className="w-3.5 h-3.5 text-amber-600" />
+                    Legal Research
                   </button>
                   <button
-                    id="nav-judgment-search"
-                    onClick={() => onNavigate('judgment-search')}
-                    className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1 ${currentView === 'judgment-search' ? 'bg-slate-900 text-white' : 'text-slate-800 hover:bg-slate-100'}`}
+                    id="nav-lawyer-drafting"
+                    onClick={() => onNavigate('lawyer-drafting')}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1 cursor-pointer ${currentView === 'lawyer-drafting' || currentView === 'ai-drafting' ? 'bg-amber-800 text-white' : 'text-slate-800 hover:bg-slate-100'}`}
                   >
-                    <Scale className="w-3.5 h-3.5 text-slate-600" />
-                    Judgments
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                    AI Drafting
+                  </button>
+                  <button
+                    id="nav-lawyer-drafts"
+                    onClick={() => onNavigate('lawyer-drafts')}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1 cursor-pointer ${currentView === 'lawyer-drafts' ? 'bg-amber-800 text-white' : 'text-slate-800 hover:bg-slate-100'}`}
+                  >
+                    <FileText className="w-3.5 h-3.5 text-amber-600" />
+                    Drafts
                   </button>
                   <button
                     id="nav-lawyer-profile"

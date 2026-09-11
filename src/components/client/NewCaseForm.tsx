@@ -564,7 +564,7 @@ export const NewCaseForm: React.FC<NewCaseFormProps> = ({
                 Upload Contemporaneous Evidence & Supporting Documents
               </h3>
               <p className="text-slate-500 text-xs">
-                LAWShin supports PDF documents, High-Resolution Images, Audio call recordings, and Video inspection walkthroughs.
+                Counselia supports PDF documents, High-Resolution Images, Audio call recordings, and Video inspection walkthroughs.
               </p>
             </div>
 
@@ -753,7 +753,7 @@ export const NewCaseForm: React.FC<NewCaseFormProps> = ({
                   className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
                 />
                 <span className="text-[11px] text-amber-900 leading-relaxed">
-                  I understand that under Bar Council of India rules, no legal outcome or court decree is ever guaranteed by advocates or LAWShin.
+                  I understand that under Bar Council of India rules, no legal outcome or court decree is ever guaranteed by advocates or Counselia.
                 </span>
               </label>
 
@@ -781,7 +781,7 @@ export const NewCaseForm: React.FC<NewCaseFormProps> = ({
                   className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
                 />
                 <span className="text-[11px] text-amber-900 leading-relaxed">
-                  I acknowledge that LAWShin operates as an IT intermediary platform under Section 79 of the IT Act 2000 and is not a law firm.
+                  I acknowledge that Counselia operates as an IT intermediary platform under Section 79 of the IT Act 2000 and is not a law firm.
                 </span>
               </label>
             </div>
@@ -802,7 +802,7 @@ export const NewCaseForm: React.FC<NewCaseFormProps> = ({
                 Ready to Formally Initiate Your Case?
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Submitting this form will register a legal matter record in the LAWShin database and establish your private, end-to-end encrypted Case Room.
+                Submitting this form will register a legal matter record in the Counselia database and establish your private, end-to-end encrypted Counselia Case Room.
               </p>
             </div>
 

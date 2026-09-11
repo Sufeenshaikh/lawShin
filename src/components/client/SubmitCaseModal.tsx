@@ -367,7 +367,7 @@ export const SubmitCaseModal: React.FC<SubmitCaseModalProps> = ({
                   {!selectedLawyerId && <CheckCircle2 className="w-4 h-4 text-amber-600" />}
                 </div>
                 <p className="text-slate-500 text-xs">
-                  LAWShin will automatically route your case to the highest-rated verified advocate enrolled in {city} handling {category} matters.
+                  Counselia will automatically route your case to the highest-rated verified advocate enrolled in {city} handling {category} matters.
                 </p>
               </div>
 

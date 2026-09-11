@@ -1,368 +1,575 @@
 import React, { useState } from 'react';
 import {
   Sparkles,
-  AlertTriangle,
+  ShieldAlert,
   Copy,
   Check,
+  RotateCw,
+  FolderDown,
   FileText,
-  Send,
-  Loader2,
-  BookmarkPlus,
+  AlertCircle,
   Scale,
-  ShieldAlert
+  Building,
+  CheckCircle2,
+  ExternalLink,
+  ChevronRight,
+  Info
 } from 'lucide-react';
 import { api } from '../../services/api.js';
 import { LegalCase } from '../../types.js';
+import { Button, Badge, Card, Textarea, Select, LoadingState, Alert } from '../ui/index.js';
+
+export type DocumentTypeOption =
+  | 'Legal Notice'
+  | 'Reply to Notice'
+  | 'Consumer Complaint'
+  | 'Settlement Letter'
+  | 'Affidavit'
+  | 'Other';
+
+const DOCUMENT_TYPES: DocumentTypeOption[] = [
+  'Legal Notice',
+  'Reply to Notice',
+  'Consumer Complaint',
+  'Settlement Letter',
+  'Affidavit',
+  'Other'
+];
 
 interface AIDraftingToolProps {
   cases?: LegalCase[];
   onAttachToCase?: (caseId: string, draftContent: string) => void;
+  onNavigateToCaseRoom?: (caseId: string, tab?: string) => void;
 }
 
-export const AIDraftingTool: React.FC<AIDraftingToolProps> = ({ cases = [], onAttachToCase }) => {
-  const [draftType, setDraftType] = useState('Legal Notice - Tenancy Deposit Recovery');
-  const [clientName, setClientName] = useState('Rohan Deshmukh');
-  const [opponentName, setOpponentName] = useState('Mr. Vikramaditya Malhotra (Landlord)');
-  const [amount, setAmount] = useState('140000');
-  const [facts, setFacts] = useState(
-    'Tenancy commenced on 1st March 2024 at Flat 402, Green Glen Layout, Bellandur, Bengaluru. Monthly rent was ₹35,000 paid punctually. Security deposit of ₹1,40,000 paid via NEFT. Vacated premises on 28th February 2025 after 1 month advance notice. Landlord acknowledged handover key but failed to return deposit, giving vague excuses of painting charges with no bills.'
-  );
-  const [customPrompt, setCustomPrompt] = useState('');
+export const AIDraftingTool: React.FC<AIDraftingToolProps> = ({
+  cases = [],
+  onAttachToCase,
+  onNavigateToCaseRoom
+}) => {
+  // Input states
+  const [documentType, setDocumentType] = useState<DocumentTypeOption>('Legal Notice');
+  const [otherDocumentType, setOtherDocumentType] = useState('');
+  const [selectedCaseId, setSelectedCaseId] = useState<string>('');
+  const [describeNeed, setDescribeNeed] = useState('');
+  const [additionalFacts, setAdditionalFacts] = useState('');
 
-  const [loading, setLoading] = useState(false);
-  const [draftResult, setDraftResult] = useState<string>('');
-  const [disclaimer, setDisclaimer] = useState<string>('');
+  // Generation & Result states
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedDraft, setGeneratedDraft] = useState('');
+  const [isEdited, setIsEdited] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [selectedCaseId, setSelectedCaseId] = useState(cases[0]?.id || '');
-  const [attachSuccess, setAttachSuccess] = useState(false);
 
-  const presets = [
-    {
-      label: 'Tenancy Security Deposit Notice',
-      type: 'Legal Notice - Tenancy Deposit Recovery',
-      client: 'Rohan Deshmukh',
-      opponent: 'Mr. Vikramaditya Malhotra (Landlord)',
-      amt: '140000',
-      facts: 'Tenancy at Flat 402 ended 28 Feb 2025. Landlord withheld ₹1,40,000 security deposit illegally without rental arrears or itemized damage assessment. Demanding refund with 18% p.a. interest within 15 days.'
-    },
-    {
-      label: 'Section 138 NI Act Cheque Bounce',
-      type: 'Statutory Notice under Section 138 of Negotiable Instruments Act',
-      client: 'Arunav Singhal (Sole Proprietor)',
-      opponent: 'Devendra Kumar (Managing Director, Alpha Logistix Pvt Ltd)',
-      amt: '450000',
-      facts: 'Cheque No. 492011 dated 15 Jan 2025 drawn on HDFC Bank Connaught Place returned dishonoured with bank memo Funds Insufficient on 20 Jan 2025. Statutory 30-day demand notice.'
-    },
-    {
-      label: 'Consumer Protection Notice',
-      type: 'Notice under Consumer Protection Act 2019 for Defective Goods',
-      client: 'Meera Iyer',
-      opponent: 'Apex Electronics Pvt Ltd & Authorized Service Center',
-      amt: '85000',
-      facts: 'Purchased 4K Smart Television on 10 Oct 2024. Screen panel developed display distortion within 30 days. Manufacturer refused replacement despite manufacturer 2-year warranty.'
-    },
-    {
-      label: 'Civil Summary Suit Demand (Order 37 CPC)',
-      type: 'Formal Demand Notice Prior to Summary Suit under Order 37 CPC',
-      client: 'Starlight Media Solutions',
-      opponent: 'Zenith Retail Brands LLP',
-      amt: '320000',
-      facts: 'Invoices for marketing services rendered between Aug - Nov 2024 unpaid despite written acknowledgement of receipt and email assurances.'
+  // Save to Case Document Vault states
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [savedDocTitle, setSavedDocTitle] = useState('');
+
+  const activeCase = cases.find((c) => c.id === selectedCaseId);
+
+  // Handle case selection change
+  const handleCaseChange = (caseId: string) => {
+    setSelectedCaseId(caseId);
+    setSavedSuccess(false);
+
+    if (caseId) {
+      const found = cases.find((c) => c.id === caseId);
+      if (found && !describeNeed && !additionalFacts) {
+        // Helpful initial context from the selected case
+        setDescribeNeed(`Draft formal ${documentType} for ${found.title} concerning ${found.category} matter.`);
+        setAdditionalFacts(
+          `Case Number: ${found.caseNumber}\nClient: ${found.clientName}\nOpponent: ${found.opponentName || 'Opposite Party'}\nFacts Overview: ${found.description || 'Details of dispute'}`
+        );
+      }
     }
-  ];
+  };
 
-  const handleApplyPreset = (p: typeof presets[0]) => {
-    setDraftType(p.type);
-    setClientName(p.client);
-    setOpponentName(p.opponent);
-    setAmount(p.amt);
-    setFacts(p.facts);
+  // Quick Preset Helper for Advocate convenience
+  const handleLoadSample = (type: DocumentTypeOption) => {
+    setDocumentType(type);
+    setErrorMessage(null);
+    setSavedSuccess(false);
+
+    if (type === 'Legal Notice') {
+      setDescribeNeed('Demand refund of withheld tenancy security deposit of ₹1,40,000 within 15 statutory days with 18% per annum interest, failing which civil suit and criminal proceedings for breach of trust will be initiated.');
+      setAdditionalFacts('Tenancy agreement dated 1 March 2024 for Flat 402, Bellandur. Monthly rent ₹35,000 punctually paid. Vacated on 28 February 2025 after 1 month advance notice. Handover acknowledged in writing. Landlord withheld ₹1,40,000 without bills or legitimate deductions.');
+    } else if (type === 'Reply to Notice') {
+      setDescribeNeed('Comprehensive formal reply refuting allegations in statutory demand notice dated 15 Jan 2025, denying any outstanding liability and reserving counter-claims.');
+      setAdditionalFacts('Opponent falsely claimed non-delivery of goods. Goods were duly delivered via Waybill #49102 on 12 Nov 2024 and acknowledged by opponent warehouse supervisor. Demanding withdrawal of frivolous notice within 7 days.');
+    } else if (type === 'Consumer Complaint') {
+      setDescribeNeed('Draft formal Consumer Complaint under Section 35 of Consumer Protection Act 2019 for deficiency in service and unfair trade practice against authorized electronics manufacturer and retailer.');
+      setAdditionalFacts('Purchased 55-inch Smart TV on 10 Oct 2024 for ₹64,990 with 2-year warranty. Display panel ceased functioning on 20 Nov 2024. Manufacturer rejected warranty claim citing fabricated physical damage without inspection.');
+    } else if (type === 'Settlement Letter') {
+      setDescribeNeed('Without prejudice proposal for amicable settlement of commercial dispute under Order 23 Rule 3 CPC prior to trial listing.');
+      setAdditionalFacts('Pending commercial claim of ₹5,20,000. Client offers to accept ₹4,50,000 in two equal tranches within 30 days in full and final satisfaction, subject to mutual release and disposal of proceedings.');
+    } else if (type === 'Affidavit') {
+      setDescribeNeed('Affidavit in support of application for condonation of delay under Section 5 of Limitation Act in filing written statement.');
+      setAdditionalFacts('Notice received on 5 Dec 2024. Advocate counsel suffered viral illness and hospitalization between 15 Dec - 10 Jan 2025 as per attached medical certificate. Delay of 18 days is bona fide and non-deliberate.');
+    } else {
+      setDescribeNeed('Formal legal document draft outlining rights, liabilities, and statutory remedies.');
+      setAdditionalFacts('Provide relevant transaction dates, agreement numbers, obligations discharged, and specific legal remedies desired.');
+    }
   };
 
   const handleGenerate = async () => {
-    setLoading(true);
-    setAttachSuccess(false);
+    const effectiveDocType = documentType === 'Other' ? otherDocumentType || 'Legal Document' : documentType;
+
+    if (!describeNeed.trim() && !additionalFacts.trim()) {
+      setErrorMessage('Please describe what you need or provide facts before generating a draft.');
+      return;
+    }
+
+    setIsGenerating(true);
+    setErrorMessage(null);
+    setSavedSuccess(false);
+
     try {
       const res = await api.generateAiDraft({
-        draftType,
-        clientName,
-        opponentName,
-        amount,
-        facts,
-        prompt: customPrompt
+        documentType: effectiveDocType,
+        describeNeed: describeNeed.trim(),
+        additionalFacts: additionalFacts.trim(),
+        caseId: selectedCaseId || undefined,
+        caseTitle: activeCase?.title,
+        clientName: activeCase?.clientName,
+        opponentName: activeCase?.opponentName
       });
-      setDraftResult(res.draft);
-      setDisclaimer(res.disclaimer);
-    } catch (err) {
-      console.error(err);
+
+      if (res.draft) {
+        setGeneratedDraft(res.draft);
+        setIsEdited(false);
+      } else {
+        setErrorMessage('The draft could not be generated. The server did not return draft content. AI Studio will not invent synthetic content.');
+      }
+    } catch (err: any) {
+      console.error('Draft generation error:', err);
+      // Explicit error explanation instead of inventing content
+      setErrorMessage(
+        err?.message ||
+          'The draft could not be generated due to a service error. In accordance with legal safety compliance, synthetic content has not been substituted. Please verify server configuration and retry.'
+      );
     } finally {
-      setLoading(false);
+      setIsGenerating(false);
     }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(draftResult);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    if (!generatedDraft) return;
+    try {
+      await navigator.clipboard.writeText(generatedDraft);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch (e) {
+      console.error('Failed to copy', e);
+    }
   };
 
-  const handleAttach = async () => {
-    if (!selectedCaseId || !draftResult) return;
+  const handleSaveToCase = async () => {
+    if (!generatedDraft) return;
+
+    if (!selectedCaseId) {
+      setErrorMessage('Please select a Case from the dropdown above to save this draft to its Case Documents Vault.');
+      return;
+    }
+
+    const effectiveDocType = documentType === 'Other' ? otherDocumentType || 'Legal Document' : documentType;
+    const title = `${effectiveDocType} - Initial AI Draft (${new Date().toLocaleDateString('en-IN')})`;
+
+    setIsSaving(true);
+    setErrorMessage(null);
+
     try {
       await api.uploadCaseDocument(selectedCaseId, {
-        title: `${draftType} (AI Initial Draft - Lawyer Reviewed)`,
-        fileName: `${draftType.replace(/[^a-zA-Z0-9]/g, '_')}_Draft.txt`,
+        title,
+        fileName: `${effectiveDocType.replace(/[^a-zA-Z0-9]/g, '_')}_Draft_${Date.now()}.txt`,
         fileType: 'doc',
-        fileSize: '4.2 KB',
-        fileUrl: '#',
-        category: 'notice'
+        fileSize: `${(generatedDraft.length / 1024).toFixed(1)} KB`,
+        fileUrl: `data:text/plain;charset=utf-8,${encodeURIComponent(generatedDraft)}`,
+        category: 'notice',
+        description: `AI-generated first draft of ${effectiveDocType} saved by advocate for case review.`
       });
-      setAttachSuccess(true);
-      if (onAttachToCase) onAttachToCase(selectedCaseId, draftResult);
-    } catch (err) {
-      console.error(err);
+
+      setSavedDocTitle(title);
+      setSavedSuccess(true);
+      if (onAttachToCase) {
+        onAttachToCase(selectedCaseId, generatedDraft);
+      }
+    } catch (err: any) {
+      console.error('Failed to save to case documents:', err);
+      setErrorMessage(err?.message || 'Failed to save document to case vault. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   return (
-    <div id="ai-drafting-tool-view" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div id="lawyer-drafting-page" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-              Advocate AI Assistant
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+              Advocate AI Legal Drafting Tool
             </span>
             <span className="text-xs text-slate-400">•</span>
-            <span className="text-xs text-slate-500 font-semibold">Gemini 2.5 Legal Drafting Engine</span>
+            <span className="text-xs text-slate-600 font-mono">Powered by Gemini AI (Server-Side)</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold font-serif text-slate-900 mt-2">
-            AI Legal Notice & Pleadings Drafting Tool
+          <h1 className="text-2xl sm:text-3xl font-bold font-serif text-slate-900 mt-1.5">
+            AI Legal Drafting Tool
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-            Accelerate the creation of statutory demand notices, Section 138 notices, consumer complaints, and legal rejoinders.
+            Accelerate the creation of structured first drafts for legal notices, rejoinders, complaints, and pleadings.
           </p>
         </div>
       </div>
 
-      {/* MANDATORY STATUTORY DISCLAIMER BANNER (MUST BE PROMINENT) */}
-      <div className="p-4 rounded-xl bg-amber-50 border-2 border-amber-300 shadow-xs flex items-start gap-3">
-        <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-        <div className="text-xs text-amber-950 leading-relaxed">
-          <strong className="font-bold text-amber-900 block uppercase tracking-wider mb-0.5">
-            Mandatory Legal Disclaimer for AI-Generated Drafts:
-          </strong>
-          Every AI-generated legal draft is provided solely as a preliminary drafting template. It is an automated starting draft and <strong>MUST be thoroughly reviewed, verified, and formally approved by an enrolled advocate</strong> before being dispatched to opponents, filed in court, or relied upon for legal advice.
+      {/* MANDATORY STATUTORY & LEGAL SAFETY NOTICE (PROMINENT) */}
+      <div
+        id="mandatory-legal-safety-banner"
+        className="p-4 sm:p-5 rounded-xl bg-amber-50/90 border-2 border-amber-300 shadow-xs flex items-start gap-3.5"
+      >
+        <div className="p-2 rounded-lg bg-amber-200/70 text-amber-900 shrink-0 mt-0.5">
+          <ShieldAlert className="w-5 h-5 text-amber-800" />
+        </div>
+        <div className="space-y-1 text-xs text-amber-950 leading-relaxed">
+          <h3 className="font-bold text-amber-950 text-sm tracking-tight flex items-center gap-2">
+            MANDATORY LEGAL SAFETY & FIRST DRAFT PROTOCOL
+          </h3>
+          <p className="font-semibold text-amber-900">
+            "AI-generated content is a starting draft and must be reviewed and approved by a qualified lawyer before being sent, filed, or relied upon."
+          </p>
+          <p className="text-slate-700 text-[11px] pt-1 border-t border-amber-200/60">
+            <strong>Statutory Notice:</strong> This software produces a preliminary working draft only. It does not provide guaranteed legal correctness, does not guarantee any legal or judicial outcome, and does not constitute formal legal advice. Qualified advocates must verify all facts, statutory references, and court precedents before finalizing.
+          </p>
         </div>
       </div>
 
-      {/* Preset Quick Selectors */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 block">
-          Quick Case Presets (Indian Legal Practice):
-        </span>
-        <div className="flex flex-wrap gap-2">
-          {presets.map((p, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => handleApplyPreset(p)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                draftType === p.type
-                  ? 'bg-amber-100 text-amber-950 border-amber-400 shadow-xs'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Drafting Workspace Split */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Intake Parameters */}
-        <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4 text-xs">
-          <h2 className="font-bold text-slate-900 text-sm font-serif border-b border-slate-100 pb-2">
-            Drafting Parameters
-          </h2>
-
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">Document Category</label>
-            <input
-              type="text"
-              value={draftType}
-              onChange={(e) => setDraftType(e.target.value)}
-              className="w-full p-2 border border-slate-300 rounded-lg bg-white"
-            />
+      {/* Main Workspace Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Form: Intake & Generation Configuration */}
+        <Card variant="default" className="lg:col-span-5 p-5 sm:p-6 space-y-5">
+          <div className="border-b border-slate-100 pb-3">
+            <h2 className="text-base font-bold font-serif text-slate-900">Drafting Inputs</h2>
+            <p className="text-xs text-slate-500">Configure the document parameters and case facts</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Client Name / Party</label>
-              <input
-                type="text"
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                className="w-full p-2 border border-slate-300 rounded-lg"
-              />
+          {/* 1. Document Type */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
+                Document Type <span className="text-rose-500">*</span>
+              </label>
+              <span className="text-[11px] text-slate-400">Select standard format</span>
             </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Opposite Party</label>
-              <input
-                type="text"
-                value={opponentName}
-                onChange={(e) => setOpponentName(e.target.value)}
-                className="w-full p-2 border border-slate-300 rounded-lg"
-              />
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {DOCUMENT_TYPES.map((type) => {
+                const isSelected = documentType === type;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    id={`doc-type-${type.toLowerCase().replace(/\s+/g, '-')}`}
+                    onClick={() => {
+                      setDocumentType(type);
+                      setSavedSuccess(false);
+                    }}
+                    className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all text-center cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-100 text-amber-950 border-amber-400 font-bold shadow-xs ring-1 ring-amber-400'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                );
+              })}
             </div>
-          </div>
 
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">Monetary Claim / Cheque Amount (₹)</label>
-            <input
-              type="text"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="e.g. 140000"
-              className="w-full p-2 border border-slate-300 rounded-lg font-mono"
-            />
-          </div>
-
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">Chronological Facts & Demand Details</label>
-            <textarea
-              rows={6}
-              value={facts}
-              onChange={(e) => setFacts(e.target.value)}
-              className="w-full p-2 border border-slate-300 rounded-lg leading-relaxed font-sans"
-              placeholder="Enter dates, terms violated, notice period, interest rate demanded..."
-            />
-          </div>
-
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">Custom Legal Instructions (Optional)</label>
-            <input
-              type="text"
-              value={customPrompt}
-              onChange={(e) => setCustomPrompt(e.target.value)}
-              placeholder="e.g. Include specific warning regarding Section 406 & 420 IPC"
-              className="w-full p-2 border border-slate-300 rounded-lg"
-            />
-          </div>
-
-          <button
-            onClick={handleGenerate}
-            disabled={loading || !facts}
-            className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-colors cursor-pointer"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generating Legal Draft via Gemini...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                Generate Advocate Draft
-              </>
+            {documentType === 'Other' && (
+              <div className="pt-2">
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                  Specify Custom Document Title:
+                </label>
+                <input
+                  type="text"
+                  value={otherDocumentType}
+                  onChange={(e) => setOtherDocumentType(e.target.value)}
+                  placeholder="e.g. Mutual Non-Disclosure Agreement, Bail Application..."
+                  className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:border-amber-500"
+                />
+              </div>
             )}
-          </button>
-        </div>
+          </div>
 
-        {/* Right Column: Generated Draft Output */}
-        <div className="lg:col-span-7 bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm font-serif">Generated Legal Draft</h3>
-                <span className="text-[11px] text-slate-600">
-                  {draftResult ? `${draftResult.split(' ').length} words • Editable` : 'Awaiting generation...'}
+          {/* 2. Select Case */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
+                Case <span className="text-slate-400 font-normal">(Optional linking)</span>
+              </label>
+              {cases.length > 0 && (
+                <span className="text-[11px] text-emerald-700 font-semibold">
+                  {cases.length} Active {cases.length === 1 ? 'Matter' : 'Matters'}
                 </span>
+              )}
+            </div>
+
+            <select
+              id="select-case-dropdown"
+              value={selectedCaseId}
+              onChange={(e) => handleCaseChange(e.target.value)}
+              className="w-full text-xs p-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-amber-500"
+            >
+              <option value="">-- No Linked Case (General / Standalone Draft) --</option>
+              {cases.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.caseNumber} - {c.title.substring(0, 36)}... (Client: {c.clientName})
+                </option>
+              ))}
+            </select>
+
+            {activeCase && (
+              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-600 flex items-center justify-between">
+                <div>
+                  <span className="font-semibold text-slate-900 block">{activeCase.title}</span>
+                  <span>Client: {activeCase.clientName} • Stage: {activeCase.stage || 'Notice Sent'}</span>
+                </div>
+                {onNavigateToCaseRoom && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToCaseRoom(activeCase.id)}
+                    className="text-amber-700 hover:text-amber-800 font-semibold flex items-center gap-0.5 shrink-0"
+                  >
+                    Case Room <ChevronRight className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 3. Describe what you need */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
+                Describe what you need <span className="text-rose-500">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => handleLoadSample(documentType)}
+                className="text-[11px] text-amber-700 hover:text-amber-800 font-semibold underline cursor-pointer"
+              >
+                Load Sample Prompt
+              </button>
+            </div>
+            <textarea
+              id="describe-need-textarea"
+              rows={4}
+              value={describeNeed}
+              onChange={(e) => {
+                setDescribeNeed(e.target.value);
+                setSavedSuccess(false);
+              }}
+              placeholder="Explain the specific objective of this document, the statutory grounds, demands, prayer clauses, or relief to incorporate..."
+              className="w-full text-xs p-3 border border-slate-300 rounded-lg leading-relaxed focus:outline-none focus:border-amber-500 bg-white"
+            />
+          </div>
+
+          {/* 4. Additional facts */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
+              Additional facts
+            </label>
+            <textarea
+              id="additional-facts-textarea"
+              rows={5}
+              value={additionalFacts}
+              onChange={(e) => {
+                setAdditionalFacts(e.target.value);
+                setSavedSuccess(false);
+              }}
+              placeholder="Chronological dates, agreement clauses, payment transactions, notices sent/received, breaches, names of parties, and addresses..."
+              className="w-full text-xs p-3 border border-slate-300 rounded-lg leading-relaxed focus:outline-none focus:border-amber-500 bg-white"
+            />
+          </div>
+
+          {/* Error Message if generation or validation fails */}
+          {errorMessage && (
+            <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs space-y-1">
+              <div className="flex items-center gap-1.5 font-bold">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                Draft Could Not Be Generated
+              </div>
+              <p className="text-[11px] leading-relaxed text-rose-700">{errorMessage}</p>
+            </div>
+          )}
+
+          {/* Generate Draft Button */}
+          <Button
+            id="btn-generate-draft"
+            variant="primary"
+            size="md"
+            className="w-full py-3 bg-amber-700 hover:bg-amber-800 text-white font-bold"
+            disabled={isGenerating || (!describeNeed.trim() && !additionalFacts.trim())}
+            isLoading={isGenerating}
+            leftIcon={<Sparkles className="w-4 h-4 text-amber-300" />}
+            onClick={handleGenerate}
+          >
+            {isGenerating ? 'Drafting via Gemini AI...' : 'Generate Draft'}
+          </Button>
+        </Card>
+
+        {/* Right Output: Generated Draft & Editor */}
+        <Card variant="default" className="lg:col-span-7 p-5 sm:p-6 space-y-4 flex flex-col justify-between min-h-[580px]">
+          <div>
+            {/* Action Toolbar Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold font-serif text-slate-900">
+                    Draft Workspace
+                  </h2>
+                  {generatedDraft && (
+                    <Badge variant={isEdited ? 'warning' : 'neutral'} size="sm">
+                      {isEdited ? 'Edited by Lawyer' : 'First Draft'}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500">
+                  {generatedDraft
+                    ? `${generatedDraft.split(/\s+/).filter(Boolean).length} words • Editable`
+                    : 'Awaiting generation parameters...'}
+                </p>
               </div>
 
-              {draftResult && (
-                <div className="flex items-center gap-2">
-                  <button
+              {generatedDraft && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    id="btn-copy-draft"
+                    variant="outline"
+                    size="sm"
                     onClick={handleCopy}
-                    className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    leftIcon={copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                   >
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    {copied ? 'Copied' : 'Copy Text'}
-                  </button>
+                    {copied ? 'Copied' : 'Copy'}
+                  </Button>
+
+                  <Button
+                    id="btn-regenerate-draft"
+                    variant="outline"
+                    size="sm"
+                    disabled={isGenerating}
+                    onClick={handleGenerate}
+                    leftIcon={<RotateCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />}
+                  >
+                    Regenerate
+                  </Button>
                 </div>
               )}
             </div>
 
-            {/* Editor / Output Area */}
-            {loading ? (
-              <div className="h-96 flex flex-col items-center justify-center text-center space-y-3 p-8">
-                <Loader2 className="w-8 h-8 text-amber-600 animate-spin" />
-                <p className="font-bold text-slate-800 text-xs">Synthesizing Statutory Pleading Template</p>
-                <p className="text-slate-500 text-[11px] max-w-sm">
-                  Formatting legal recitals, statutory time limits, interest calculations, and prayer clauses...
+            {/* Content Area */}
+            {isGenerating ? (
+              <div className="py-24 flex flex-col items-center justify-center text-center space-y-4">
+                <LoadingState message="Generating structured first draft with Gemini AI..." />
+                <p className="text-slate-500 text-xs max-w-md">
+                  Formatting statutory provisions, Indian advocate phrasing, chronological recitals, and demand timelines...
                 </p>
               </div>
-            ) : draftResult ? (
-              <div className="space-y-4">
-                <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg text-[11px] text-amber-900 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
-                  <span>
-                    <strong>Mandatory Notice:</strong> {disclaimer}
-                  </span>
+            ) : generatedDraft ? (
+              <div className="space-y-3 pt-2">
+                {/* Secondary In-Workspace Legal Notice */}
+                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg text-xs text-amber-950 flex items-start gap-2">
+                  <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                  <p className="text-[11px] leading-relaxed">
+                    <strong>Notice:</strong> This is a preliminary working draft. You can directly edit the text below. Make all necessary factual amendments and statutory adjustments before finalizing.
+                  </p>
                 </div>
 
-                <textarea
-                  rows={18}
-                  value={draftResult}
-                  onChange={(e) => setDraftResult(e.target.value)}
-                  className="w-full p-4 border border-slate-300 rounded-xl font-mono text-xs text-slate-900 leading-relaxed bg-slate-50/50 focus:bg-white focus:outline-none focus:border-amber-500"
-                />
+                {/* Editable Draft Textarea */}
+                <div className="relative">
+                  <textarea
+                    id="draft-content-editor"
+                    rows={20}
+                    value={generatedDraft}
+                    onChange={(e) => {
+                      setGeneratedDraft(e.target.value);
+                      setIsEdited(true);
+                      setSavedSuccess(false);
+                    }}
+                    className="w-full p-4 border border-slate-300 rounded-xl font-mono text-xs text-slate-900 leading-relaxed bg-slate-50/40 focus:bg-white focus:outline-none focus:border-amber-500 shadow-inner"
+                    placeholder="Generated draft will appear here..."
+                  />
+                </div>
               </div>
             ) : (
-              <div className="h-96 flex flex-col items-center justify-center text-center p-8 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-3">
+              <div className="py-20 flex flex-col items-center justify-center text-center space-y-3 p-8 border border-dashed border-slate-200 rounded-xl bg-slate-50/60 my-auto">
                 <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center">
                   <FileText className="w-6 h-6" />
                 </div>
-                <div>
-                  <p className="font-bold text-slate-800 text-sm">Ready to Generate Draft</p>
-                  <p className="text-slate-500 text-xs mt-1 max-w-md">
-                    Choose one of the quick presets on top or customize the facts on the left, then click "Generate Advocate Draft".
+                <div className="space-y-1">
+                  <h3 className="font-bold text-slate-900 text-sm font-serif">No Draft Generated Yet</h3>
+                  <p className="text-slate-500 text-xs max-w-sm">
+                    Select a document type, provide your requirements and facts, then click <strong>"Generate Draft"</strong> to produce an editable first draft.
                   </p>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Action bar to attach to active case */}
-          {draftResult && cases.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <span className="text-slate-600 font-semibold shrink-0">Attach to Case:</span>
-                <select
-                  value={selectedCaseId}
-                  onChange={(e) => setSelectedCaseId(e.target.value)}
-                  className="p-1.5 border border-slate-300 rounded-lg text-xs bg-white flex-1 sm:flex-none"
+          {/* Bottom Actions: Save to Case Documents Vault */}
+          {generatedDraft && (
+            <div className="border-t border-slate-200 pt-4 mt-4 space-y-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="text-xs text-slate-600">
+                  {selectedCaseId && activeCase ? (
+                    <span>
+                      Target Vault: <strong className="text-slate-900">{activeCase.caseNumber}</strong> ({activeCase.title.substring(0, 24)}...)
+                    </span>
+                  ) : (
+                    <span className="text-amber-800">
+                      Select a case on the left to save directly into its case vault.
+                    </span>
+                  )}
+                </div>
+
+                <Button
+                  id="btn-save-case-document"
+                  variant="primary"
+                  size="sm"
+                  disabled={isSaving || !selectedCaseId}
+                  isLoading={isSaving}
+                  onClick={handleSaveToCase}
+                  leftIcon={<FolderDown className="w-3.5 h-3.5" />}
+                  className="bg-slate-900 hover:bg-slate-800 text-white font-bold"
                 >
-                  {cases.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.caseNumber} - {c.title.substring(0, 28)}...
-                    </option>
-                  ))}
-                </select>
+                  {isSaving ? 'Saving to Vault...' : 'Save to Case Documents'}
+                </Button>
               </div>
 
-              <button
-                onClick={handleAttach}
-                className="w-full sm:w-auto px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-              >
-                <BookmarkPlus className="w-4 h-4 text-amber-400" />
-                {attachSuccess ? 'Attached to Case Vault!' : 'Save to Case Document Vault'}
-              </button>
+              {savedSuccess && (
+                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      Draft successfully saved to case documents vault as <strong>"{savedDocTitle}"</strong>.
+                    </span>
+                  </div>
+                  {onNavigateToCaseRoom && selectedCaseId && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-emerald-800 hover:text-emerald-900 underline text-xs p-0"
+                      onClick={() => onNavigateToCaseRoom(selectedCaseId, 'documents')}
+                    >
+                      View in Case Room
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );

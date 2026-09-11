@@ -1,4 +1,4 @@
--- LAWShin Persistent Database Schema (SQLite)
+-- Counselia Persistent Database Schema (SQLite)
 -- High-Performance Relational Schema with Foreign Keys, Constraints & Indexes
 
 PRAGMA foreign_keys = ON;
@@ -254,7 +254,7 @@ CREATE TABLE IF NOT EXISTS payments (
   provider TEXT NOT NULL DEFAULT 'Razorpay',
   transaction_id TEXT UNIQUE NOT NULL,
   payment_method TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'completed' CHECK(status IN ('pending', 'completed', 'failed', 'refunded')),
+  status TEXT NOT NULL DEFAULT 'Pending',
   payment_date TEXT NOT NULL,
   invoice_id TEXT,
   refund_status TEXT DEFAULT 'none',
@@ -312,12 +312,14 @@ CREATE TABLE IF NOT EXISTS appointments (
   case_title TEXT,
   date TEXT NOT NULL,
   time_slot TEXT NOT NULL,
-  type TEXT NOT NULL DEFAULT 'video' CHECK(type IN ('video', 'in_person', 'phone')),
-  mode TEXT NOT NULL DEFAULT 'Video Call',
-  status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'completed', 'cancelled')),
+  location TEXT NOT NULL DEFAULT 'Advocate Chamber',
+  type TEXT NOT NULL DEFAULT 'offline',
+  mode TEXT NOT NULL DEFAULT 'Offline Chamber Meeting',
+  status TEXT NOT NULL DEFAULT 'Requested' CHECK(status IN ('Requested', 'Confirmed', 'Completed', 'Cancelled', 'scheduled', 'completed', 'cancelled')),
   notes TEXT,
   fee REAL DEFAULT 0,
   meeting_link TEXT,
+  cancellation_reason TEXT,
   is_demo INTEGER DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -327,6 +329,7 @@ CREATE INDEX IF NOT EXISTS idx_appointments_client_id ON appointments(client_id)
 CREATE INDEX IF NOT EXISTS idx_appointments_lawyer_id ON appointments(lawyer_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_case_id ON appointments(case_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(date);
+CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);
 CREATE INDEX IF NOT EXISTS idx_appointments_is_demo ON appointments(is_demo);
 
 -- 13. REVIEWS
@@ -334,13 +337,14 @@ CREATE TABLE IF NOT EXISTS reviews (
   id TEXT PRIMARY KEY,
   lawyer_id TEXT NOT NULL REFERENCES lawyers(id) ON DELETE RESTRICT,
   client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
-  case_id TEXT REFERENCES cases(id) ON DELETE SET NULL,
+  case_id TEXT UNIQUE REFERENCES cases(id) ON DELETE SET NULL,
   client_name TEXT NOT NULL,
   rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
   comment TEXT NOT NULL,
   written_review TEXT NOT NULL,
   case_category TEXT,
-  moderation_status TEXT NOT NULL DEFAULT 'approved' CHECK(moderation_status IN ('approved', 'pending', 'flagged', 'rejected')),
+  moderation_status TEXT NOT NULL DEFAULT 'pending' CHECK(moderation_status IN ('approved', 'pending', 'flagged', 'rejected')),
+  moderation_notes TEXT,
   is_verified_client INTEGER DEFAULT 1,
   timestamp TEXT NOT NULL,
   is_demo INTEGER DEFAULT 0,
@@ -424,3 +428,32 @@ CREATE INDEX IF NOT EXISTS idx_public_content_slug ON public_content(slug);
 CREATE INDEX IF NOT EXISTS idx_public_content_type ON public_content(type);
 CREATE INDEX IF NOT EXISTS idx_public_content_category ON public_content(category);
 CREATE INDEX IF NOT EXISTS idx_public_content_is_demo ON public_content(is_demo);
+
+-- 17. CASE DEADLINES (RIGHT-TO-REMEDY / DEADLINE TRACKER)
+CREATE TABLE IF NOT EXISTS case_deadlines (
+  id TEXT PRIMARY KEY,
+  case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  deadline_type TEXT NOT NULL,
+  start_date TEXT NOT NULL,
+  deadline_date TEXT NOT NULL,
+  description TEXT,
+  calculation_source TEXT NOT NULL CHECK(calculation_source IN ('manual_lawyer_entry', 'verified_rule_engine')),
+  entered_by_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  entered_by_name TEXT NOT NULL,
+  entered_by_role TEXT NOT NULL CHECK(entered_by_role IN ('lawyer', 'admin')),
+  verified_rule_reference TEXT,
+  remedy_action_required TEXT,
+  governing_forum TEXT,
+  is_completed INTEGER DEFAULT 0,
+  completed_at TEXT,
+  notes TEXT,
+  is_demo INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_case_deadlines_case_id ON case_deadlines(case_id);
+CREATE INDEX IF NOT EXISTS idx_case_deadlines_deadline_date ON case_deadlines(deadline_date);
+CREATE INDEX IF NOT EXISTS idx_case_deadlines_is_completed ON case_deadlines(is_completed);
+CREATE INDEX IF NOT EXISTS idx_case_deadlines_is_demo ON case_deadlines(is_demo);

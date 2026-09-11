@@ -15,13 +15,18 @@ import {
   Notification,
   LegalQuery,
   PublicContent,
-  VerifiedJudgment
+  VerifiedJudgment,
+  LegalDeadline,
+  AdvocateDraft,
+  AdvocateSavedAuthority,
+  AdvocateAuditLog
 } from '../src/types.js';
 import {
   getSqliteDb,
   checkCaseAccess as checkCaseAccessRaw,
   checkDocumentAccess as checkDocumentAccessRaw,
-  checkMessageAccess as checkMessageAccessRaw
+  checkMessageAccess as checkMessageAccessRaw,
+  checkDeadlineAccess as checkDeadlineAccessRaw
 } from './db/sqlite.js';
 
 export interface DatabaseState {
@@ -42,6 +47,10 @@ export interface DatabaseState {
   queries: LegalQuery[];
   judgments: VerifiedJudgment[];
   publicContent: PublicContent[];
+  deadlines: LegalDeadline[];
+  drafts: AdvocateDraft[];
+  savedAuthorities: AdvocateSavedAuthority[];
+  advocateAuditLogs: AdvocateAuditLog[];
 }
 
 // Prepared statements cache for SQLite persistence
@@ -264,7 +273,9 @@ function getUpsertStatements() {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         case_id = excluded.case_id,
+        transaction_id = excluded.transaction_id,
         status = excluded.status,
+        invoice_id = excluded.invoice_id,
         refund_status = excluded.refund_status,
         timestamps_completed = excluded.timestamps_completed,
         updated_at = excluded.updated_at;
@@ -285,12 +296,17 @@ function getUpsertStatements() {
     appointment: db.prepare(`
       INSERT INTO appointments (
         id, client_id, lawyer_id, case_id, client_name, lawyer_name, case_title,
-        date, time_slot, type, mode, status, notes, fee, meeting_link,
-        is_demo, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        date, time_slot, location, type, mode, status, notes, fee, meeting_link,
+        cancellation_reason, is_demo, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
+        date = excluded.date,
+        time_slot = excluded.time_slot,
+        location = excluded.location,
         status = excluded.status,
+        mode = excluded.mode,
         notes = excluded.notes,
+        cancellation_reason = excluded.cancellation_reason,
         meeting_link = excluded.meeting_link,
         updated_at = excluded.updated_at;
     `),
@@ -298,14 +314,15 @@ function getUpsertStatements() {
     review: db.prepare(`
       INSERT INTO reviews (
         id, lawyer_id, client_id, case_id, client_name, rating, comment,
-        written_review, case_category, moderation_status, is_verified_client,
+        written_review, case_category, moderation_status, moderation_notes, is_verified_client,
         timestamp, is_demo, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         rating = excluded.rating,
         comment = excluded.comment,
         written_review = excluded.written_review,
-        moderation_status = excluded.moderation_status;
+        moderation_status = excluded.moderation_status,
+        moderation_notes = excluded.moderation_notes;
     `),
 
     notification: db.prepare(`
@@ -338,6 +355,33 @@ function getUpsertStatements() {
       ON CONFLICT(id) DO UPDATE SET
         content_markdown = excluded.content_markdown,
         views_count = excluded.views_count,
+        updated_at = excluded.updated_at;
+    `),
+
+    deadline: db.prepare(`
+      INSERT INTO case_deadlines (
+        id, case_id, title, deadline_type, start_date, deadline_date,
+        description, calculation_source, entered_by_id, entered_by_name,
+        entered_by_role, verified_rule_reference, remedy_action_required,
+        governing_forum, is_completed, completed_at, notes, is_demo, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        title = excluded.title,
+        deadline_type = excluded.deadline_type,
+        start_date = excluded.start_date,
+        deadline_date = excluded.deadline_date,
+        description = excluded.description,
+        calculation_source = excluded.calculation_source,
+        entered_by_id = excluded.entered_by_id,
+        entered_by_name = excluded.entered_by_name,
+        entered_by_role = excluded.entered_by_role,
+        verified_rule_reference = excluded.verified_rule_reference,
+        remedy_action_required = excluded.remedy_action_required,
+        governing_forum = excluded.governing_forum,
+        is_completed = excluded.is_completed,
+        completed_at = excluded.completed_at,
+        notes = excluded.notes,
+        is_demo = excluded.is_demo,
         updated_at = excluded.updated_at;
     `)
   };
@@ -626,15 +670,17 @@ export function persistAppointment(a: Appointment): void {
     a.caseTitle || null,
     a.date,
     a.timeSlot,
-    'video',
-    a.mode,
+    a.location || 'Advocate Chamber',
+    'offline',
+    a.mode || 'Offline Chamber Meeting',
     a.status,
     a.notes || null,
     a.fee || 0,
     a.meetingLink || null,
+    a.cancellationReason || null,
     isDemo,
-    now,
-    now
+    a.createdAt || now,
+    a.updatedAt || now
   );
 }
 
@@ -652,7 +698,8 @@ export function persistReview(r: Review): void {
     r.comment,
     r.writtenReview || r.comment,
     r.caseCategory,
-    r.moderationStatus || 'approved',
+    r.moderationStatus || 'pending',
+    r.moderationNotes || null,
     r.isVerifiedClient ? 1 : 0,
     r.timestamp || r.createdAt || now,
     isDemo,
@@ -728,6 +775,39 @@ export function persistPublicContent(c: PublicContent): void {
     c.createdAt || now,
     c.updatedAt || now
   );
+}
+
+export function persistDeadline(d: LegalDeadline): void {
+  const stmts = getUpsertStatements();
+  const isDemo = d.isDemo ? 1 : 0;
+  const now = new Date().toISOString();
+  stmts.deadline.run(
+    d.id,
+    d.caseId,
+    d.title,
+    d.deadlineType,
+    d.startDate,
+    d.deadlineDate,
+    d.description || null,
+    d.calculationSource,
+    d.enteredById,
+    d.enteredByName,
+    d.enteredByRole,
+    d.verifiedRuleReference ? JSON.stringify(d.verifiedRuleReference) : null,
+    d.remedyActionRequired || null,
+    d.governingForum || null,
+    d.isCompleted ? 1 : 0,
+    d.completedAt || null,
+    d.notes || null,
+    isDemo,
+    d.createdAt || now,
+    d.updatedAt || now
+  );
+}
+
+export function deleteDeadlineFromSqlite(id: string): void {
+  const db = getSqliteDb();
+  db.prepare('DELETE FROM case_deadlines WHERE id = ?').run(id);
 }
 
 /**
@@ -1034,11 +1114,15 @@ function loadStateFromSqlite(): DatabaseState {
     caseTitle: r.case_title || undefined,
     date: r.date,
     timeSlot: r.time_slot,
-    status: r.status,
-    mode: r.mode,
+    location: r.location || 'Chamber No. 342, Lawyers Chamber Block, Saket District Court, New Delhi',
+    status: (r.status === 'scheduled' ? 'Confirmed' : r.status) as any,
+    mode: r.mode || 'Offline Chamber Meeting',
     notes: r.notes || undefined,
     fee: r.fee,
     meetingLink: r.meeting_link || undefined,
+    cancellationReason: r.cancellation_reason || undefined,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
     isDemo: !!r.is_demo
   }));
 
@@ -1050,13 +1134,15 @@ function loadStateFromSqlite(): DatabaseState {
     clientId: r.client_id,
     clientName: r.client_name,
     caseId: r.case_id || undefined,
+    caseTitle: undefined,
     rating: r.rating,
     comment: r.comment,
-    writtenReview: r.written_review,
-    caseCategory: r.case_category,
-    moderationStatus: r.moderation_status,
+    writtenReview: r.written_review || r.comment,
+    caseCategory: r.case_category || 'General Legal Matter',
+    moderationStatus: r.moderation_status || 'pending',
+    moderationNotes: r.moderation_notes || undefined,
     createdAt: r.created_at,
-    timestamp: r.timestamp,
+    timestamp: r.timestamp || r.created_at,
     isVerifiedClient: !!r.is_verified_client,
     isDemo: !!r.is_demo
   }));
@@ -1137,6 +1223,47 @@ function loadStateFromSqlite(): DatabaseState {
       isDemo: !!r.is_demo
     }));
 
+  // 17. Case Deadlines (Right-to-Remedy Tracker)
+  const deadlineRows = db.prepare('SELECT * FROM case_deadlines ORDER BY deadline_date ASC').all() as any[];
+  const deadlines: LegalDeadline[] = deadlineRows.map((r) => {
+    // Dynamically compute days remaining & status relative to current timestamp
+    const target = new Date(r.deadline_date);
+    target.setHours(23, 59, 59, 999);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    let status: 'safe' | 'approaching' | 'urgent' | 'expired' = 'safe';
+    if (diffDays < 0) status = 'expired';
+    else if (diffDays <= 3) status = 'urgent';
+    else if (diffDays <= 14) status = 'approaching';
+    else status = 'safe';
+
+    return {
+      id: r.id,
+      caseId: r.case_id,
+      title: r.title,
+      deadlineType: r.deadline_type,
+      startDate: r.start_date,
+      deadlineDate: r.deadline_date,
+      daysRemaining: diffDays,
+      status,
+      description: r.description || undefined,
+      calculationSource: r.calculation_source,
+      enteredById: r.entered_by_id,
+      enteredByName: r.entered_by_name,
+      enteredByRole: r.entered_by_role,
+      verifiedRuleReference: r.verified_rule_reference ? JSON.parse(r.verified_rule_reference) : undefined,
+      remedyActionRequired: r.remedy_action_required || undefined,
+      governingForum: r.governing_forum || undefined,
+      isCompleted: !!r.is_completed,
+      completedAt: r.completed_at || undefined,
+      notes: r.notes || undefined,
+      isDemo: !!r.is_demo,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    };
+  });
+
   return {
     users: createPersistentArray(users, persistUser),
     clients: createPersistentArray(clients, persistClient),
@@ -1154,7 +1281,201 @@ function loadStateFromSqlite(): DatabaseState {
     notifications: createPersistentArray(notifications, persistNotification),
     queries: createPersistentArray(queries, persistQuery),
     judgments,
-    publicContent: createPersistentArray(publicContent, persistPublicContent)
+    publicContent: createPersistentArray(publicContent, persistPublicContent),
+    deadlines: createPersistentArray(deadlines, persistDeadline),
+    savedAuthorities: [
+      {
+        id: 'auth_1',
+        caseId: 'case_1',
+        caseNumber: 'LS-2025-1001',
+        lawyerId: 'l_1',
+        caseName: 'Dashrath Rupsingh Rathod v. State of Maharashtra',
+        citation: '(2014) 9 SCC 129',
+        court: 'Supreme Court of India',
+        bench: 'T.S. Thakur, Vikramajit Sen, C. Nagappan, JJ.',
+        decisionDate: '2014-08-01',
+        legalSections: ['Section 138 Negotiable Instruments Act', 'Section 142 NI Act'],
+        relevantPassage:
+          'Territorial jurisdiction for initiating complaint under Section 138 lies strictly at the place where the drawee bank is located and where the cheque was dishonoured.',
+        shortSummary:
+          'Landmark precedent clarifying jurisdictional territorial forum under Section 138 of Negotiable Instruments Act 1881.',
+        source: 'Supreme Court Reports (SCR)',
+        sourceUrl: 'https://main.sci.gov.in/judgment/2014/129',
+        isVerified: true,
+        notes: 'Governs territorial jurisdiction of Saket District Court presentation for this dishonour matter.',
+        addedAt: '2025-02-10T10:30:00.000Z'
+      },
+      {
+        id: 'auth_2',
+        caseId: 'case_1',
+        caseNumber: 'LS-2025-1001',
+        lawyerId: 'l_1',
+        caseName: 'Bir Singh v. Mukesh Kumar',
+        citation: '(2019) 4 SCC 197',
+        court: 'Supreme Court of India',
+        bench: 'R. Banumathi, Indira Banerjee, JJ.',
+        decisionDate: '2019-02-06',
+        legalSections: ['Section 139 Negotiable Instruments Act', 'Section 118 NI Act'],
+        relevantPassage:
+          'A blank cheque leaf voluntarily signed and handed over towards payment attracts the statutory presumption under Section 139 of the Act in favor of the holder.',
+        shortSummary:
+          'Presumption under Section 139 NI Act applies even if particulars on signed cheque were filled by payee.',
+        source: 'Supreme Court Reports (SCR)',
+        sourceUrl: 'https://main.sci.gov.in/judgment/2019/197',
+        isVerified: true,
+        notes: 'Key authority to rebut drawer plea of blank signed security cheque.',
+        addedAt: '2025-02-11T14:15:00.000Z'
+      },
+      {
+        id: 'auth_3',
+        caseId: 'case_2',
+        caseNumber: 'LS-2025-1002',
+        lawyerId: 'l_1',
+        caseName: 'Satender Kumar Antil v. Central Bureau of Investigation',
+        citation: '2022 LiveLaw (SC) 577',
+        court: 'Supreme Court of India',
+        bench: 'S.K. Kaul, M.M. Sundresh, JJ.',
+        decisionDate: '2022-07-11',
+        legalSections: ['Section 438 CrPC', 'Section 41A CrPC', 'Article 21 Constitution of India'],
+        relevantPassage:
+          'Arrest is a draconian measure resulting in curtailment of personal liberty. The investigating agency must scrupulously satisfy compliance with Section 41 and 41A CrPC.',
+        shortSummary:
+          'Comprehensive guidelines on personal liberty, anticipatory bail categories, and prevention of arbitrary arrests.',
+        source: 'Supreme Court of India Official Repository',
+        sourceUrl: 'https://main.sci.gov.in/judgment/2022/577',
+        isVerified: true,
+        notes: 'Crucial citation for Category A offences where custody is not mandatory.',
+        addedAt: '2025-02-12T09:00:00.000Z'
+      }
+    ],
+    drafts: [
+      {
+        id: 'draft_1',
+        caseId: 'case_1',
+        caseNumber: 'LS-2025-1001',
+        caseTitle: 'Cheque Dishonour Notice & Recovery under Section 138 NI Act',
+        clientName: 'Rohan Deshmukh',
+        clientId: 'cl_1',
+        lawyerId: 'l_1',
+        lawyerName: 'Adv. Rajeshwar Sharma',
+        documentType: 'Legal Notice',
+        title: 'Statutory Demand Notice under Section 138 of Negotiable Instruments Act 1881',
+        content:
+          'LEGAL STATUTORY DEMAND NOTICE\n\n' +
+          'To,\n' +
+          'M/S APEX INFRASTRUCTURE PVT. LTD. & MR. VIKRAM MALHOTRA (DIRECTOR)\n' +
+          '[ADDRESS OF NOTICEE: SECTOR 62, NOIDA, UTTAR PRADESH]\n\n' +
+          'SUBJECT: STATUTORY DEMAND NOTICE UNDER SECTION 138 OF THE NEGOTIABLE INSTRUMENTS ACT, 1881 FOR DISHONOUR OF CHEQUE NO. [INFORMATION REQUIRED: CHEQUE NUMBER] DRAWN ON HDFC BANK LTD. FOR RS. [INFORMATION REQUIRED: DISHONOURED AMOUNT].\n\n' +
+          'Sir/Madam,\n\n' +
+          'Under express instructions and on behalf of my client, Mr. Rohan Deshmukh, resident of New Delhi (hereinafter referred to as "My Client"), I hereby serve upon you this Statutory Demand Notice:\n\n' +
+          '1. That My Client had rendered professional consultancy and infrastructure advisory services to you, against which you admitted your legally enforceable liability to pay the agreed professional fees.\n\n' +
+          '2. That in partial discharge of your legally enforceable debt, you issued Cheque bearing No. [INFORMATION REQUIRED: CHEQUE NUMBER] dated [INFORMATION REQUIRED: CHEQUE DATE] for an amount of Rs. [INFORMATION REQUIRED: AMOUNT] drawn on HDFC Bank Ltd.\n\n' +
+          '3. That My Client presented the said cheque for encashment through his banker, State Bank of India, Saket Branch. However, to the utmost shock of My Client, the said cheque was dishonoured and returned unpaid vide Bank Return Memo dated [INFORMATION REQUIRED: DATE OF RETURN MEMO] with the official remark "FUNDS INSUFFICIENT".\n\n' +
+          '4. That as held by the Hon\'ble Supreme Court in Bir Singh v. Mukesh Kumar (2019) 4 SCC 197, once the issuance of the signed instrument is established, the statutory presumption under Section 139 NI Act operates strictly against the drawer.\n\n' +
+          '5. That you have committed an offence punishable under Section 138 of the Negotiable Instruments Act, 1881, as well as offences of cheating and breach of trust.\n\n' +
+          'DEMAND CLAUSE:\n' +
+          'I hereby call upon you to pay the total outstanding sum of Rs. [INFORMATION REQUIRED: AMOUNT] along with statutory interest @ 18% per annum to My Client within a statutory period of 15 (FIFTEEN) DAYS from the date of receipt of this notice, failing which My Client shall initiate criminal complaint proceedings under Section 138/142 of the Negotiable Instruments Act before the competent jurisdictional Magistrate at New Delhi, entirely at your risk, cost, and consequence.\n\n' +
+          'Yours faithfully,\n\n' +
+          'Adv. Rajeshwar Sharma\n' +
+          'Advocate on Record, Enrolment No: D/1482/2011\n' +
+          'Chamber No. 342, Lawyers Block, Saket District Court, New Delhi',
+        courtDetails: 'BEFORE THE HON\'BLE CHIEF METROPOLITAN MAGISTRATE',
+        jurisdiction: 'NEW DELHI DISTRICT, SAKET COURTS',
+        relevantSections: ['Section 138 NI Act', 'Section 142 NI Act', 'Section 139 NI Act'],
+        authorities: [
+          {
+            id: 'auth_1',
+            caseId: 'case_1',
+            lawyerId: 'l_1',
+            caseName: 'Dashrath Rupsingh Rathod v. State of Maharashtra',
+            citation: '(2014) 9 SCC 129',
+            court: 'Supreme Court of India',
+            decisionDate: '2014-08-01',
+            relevantPassage: 'Territorial jurisdiction for initiating complaint under Section 138 lies at the place where the drawee bank is located.',
+            source: 'Supreme Court Reports (SCR)',
+            sourceUrl: 'https://main.sci.gov.in/judgment/2014/129',
+            isVerified: true,
+            addedAt: '2025-02-10T10:30:00.000Z'
+          }
+        ],
+        language: 'English',
+        status: 'UNDER REVIEW',
+        isSharedWithClient: false,
+        versions: [
+          {
+            id: 'v_1',
+            versionNumber: 1,
+            title: 'Initial AI First Draft',
+            content: 'Initial statutory notice draft generated based on case intake facts.',
+            status: 'DRAFT',
+            modifiedAt: '2025-02-10T11:00:00.000Z',
+            modifiedBy: 'Adv. Rajeshwar Sharma',
+            changeSummary: 'Generated initial structured statutory legal notice.'
+          },
+          {
+            id: 'v_2',
+            versionNumber: 2,
+            title: 'Advocate Verified Version 2',
+            content:
+              'LEGAL STATUTORY DEMAND NOTICE\n\nTo,\nM/S APEX INFRASTRUCTURE PVT. LTD...\n[Content expanded with Bir Singh precedent and 18% statutory interest demand]',
+            status: 'UNDER REVIEW',
+            modifiedAt: '2025-02-11T16:30:00.000Z',
+            modifiedBy: 'Adv. Rajeshwar Sharma',
+            changeSummary: 'Added Section 139 precedent citation and strengthened 15-day statutory demand timeline.'
+          }
+        ],
+        createdAt: '2025-02-10T11:00:00.000Z',
+        updatedAt: '2025-02-11T16:30:00.000Z'
+      }
+    ],
+    advocateAuditLogs: [
+      {
+        id: 'audit_1',
+        lawyerId: 'l_1',
+        lawyerName: 'Adv. Rajeshwar Sharma',
+        action: 'judgment_searched',
+        actionLabel: 'Precedent Research Executed',
+        details: 'Searched verified case law database for "Section 138 territorial jurisdiction".',
+        caseId: 'case_1',
+        caseNumber: 'LS-2025-1001',
+        timestamp: '2025-02-10T10:25:00.000Z'
+      },
+      {
+        id: 'audit_2',
+        lawyerId: 'l_1',
+        lawyerName: 'Adv. Rajeshwar Sharma',
+        action: 'judgment_saved',
+        actionLabel: 'Authority Saved to Case',
+        details: 'Saved precedent "Dashrath Rupsingh Rathod v. State of Maharashtra" ((2014) 9 SCC 129) to Case LS-2025-1001.',
+        caseId: 'case_1',
+        caseNumber: 'LS-2025-1001',
+        timestamp: '2025-02-10T10:30:00.000Z'
+      },
+      {
+        id: 'audit_3',
+        lawyerId: 'l_1',
+        lawyerName: 'Adv. Rajeshwar Sharma',
+        action: 'draft_generated',
+        actionLabel: 'AI Legal Draft Created',
+        details: 'Generated first draft of Legal Notice under Section 138 NI Act with strict non-fabrication placeholders.',
+        caseId: 'case_1',
+        caseNumber: 'LS-2025-1001',
+        draftId: 'draft_1',
+        timestamp: '2025-02-10T11:00:00.000Z'
+      },
+      {
+        id: 'audit_4',
+        lawyerId: 'l_1',
+        lawyerName: 'Adv. Rajeshwar Sharma',
+        action: 'draft_edited',
+        actionLabel: 'Draft Modified & Reviewed',
+        details: 'Advocate edited statutory demand clauses and verified jurisdictional recitals (Version 2).',
+        caseId: 'case_1',
+        caseNumber: 'LS-2025-1001',
+        draftId: 'draft_1',
+        timestamp: '2025-02-11T16:30:00.000Z'
+      }
+    ]
   };
 }
 
@@ -1210,3 +1531,4 @@ export function getDatabaseMetrics() {
 export { checkCaseAccessRaw as checkCaseAccess };
 export { checkDocumentAccessRaw as checkDocumentAccess };
 export { checkMessageAccessRaw as checkMessageAccess };
+export { checkDeadlineAccessRaw as checkDeadlineAccess };

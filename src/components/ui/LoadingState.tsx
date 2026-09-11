@@ -11,7 +11,7 @@ export interface LoadingStateProps {
 
 export const LoadingState: React.FC<LoadingStateProps> = ({
   message = 'Loading verified legal records...',
-  description = 'Connecting to LAWShin cryptographic case repository.',
+  description = 'Connecting to Counselia cryptographic case repository.',
   variant = 'spinner',
   rows = 3,
   className = '',
